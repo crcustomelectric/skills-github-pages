@@ -15,14 +15,35 @@
 <body>
     <div class="container">
         <header>
-            <h1>⚡ CR Custom Electric</h1>
-            <p>Crew Management & Job Assignment System</p>
+            <img src="assets/images/logo.png" alt="CR Custom Electric" class="header-logo" onerror="this.style.display='none'">
+            <div class="header-content">
+                <h1>Man Loader</h1>
+                <p>Crew Management & Job Assignment System</p>
+            </div>
         </header>
 
+        <!-- Division Tabs -->
+        <div class="division-tabs">
+            <div class="division-tab commercial active" onclick="switchDivision('all')">
+                All Projects
+            </div>
+            <div class="division-tab commercial" onclick="switchDivision('commercial')">
+                Commercial
+            </div>
+            <div class="division-tab residential" onclick="switchDivision('residential')">
+                Residential
+            </div>
+        </div>
+
+        <!-- Dashboard Stats -->
         <div class="dashboard">
             <div class="stat-card">
                 <h3>Total Workers</h3>
                 <div class="number" id="totalWorkers">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Foremen</h3>
+                <div class="number" id="totalForemen">0</div>
             </div>
             <div class="stat-card">
                 <h3>Active Jobs</h3>
@@ -36,71 +57,151 @@
                 <h3>Utilization Rate</h3>
                 <div class="number" id="utilizationRate">0%</div>
             </div>
+            <div class="stat-card">
+                <h3>Foremen Available</h3>
+                <div class="number" id="foremenAvailable">0</div>
+            </div>
         </div>
 
         <div class="main-content">
-            <div class="section">
-                <h2>👷 Add Worker</h2>
-                <form id="workerForm">
-                    <div class="form-group">
-                        <label for="workerName">Worker Name</label>
-                        <input type="text" id="workerName" placeholder="e.g., John Smith" required>
+            <!-- Manpower Needs Graph -->
+            <div class="section full-width">
+                <h2>📈 Manpower Needs Over Time</h2>
+                <div class="manpower-graph-container">
+                    <canvas id="manpowerChart" class="graph-canvas"></canvas>
+                    <div class="graph-legend">
+                        <div class="legend-item">
+                            <div class="legend-color needed"></div>
+                            <span>Workers Needed</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color available"></div>
+                            <span>Workers Available</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color shortage"></div>
+                            <span>Shortage</span>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="workerRole">Role/Certification</label>
-                        <select id="workerRole" required>
-                            <option value="">Select Role</option>
-                            <option value="master">Master Electrician</option>
-                            <option value="journeyman">Journeyman</option>
-                            <option value="apprentice">Apprentice</option>
-                        </select>
-                    </div>
-                    <button type="submit">Add Worker</button>
-                </form>
-                <div class="worker-list" id="workerList"></div>
+                </div>
             </div>
 
-            <div class="section">
-                <h2>🏗️ Add Job Site</h2>
-                <form id="jobForm">
-                    <div class="form-group">
-                        <label for="jobName">Project Name</label>
-                        <input type="text" id="jobName" placeholder="e.g., Downtown Office Building" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="jobLocation">Location</label>
-                        <input type="text" id="jobLocation" placeholder="e.g., 123 Main St" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="jobStartDate">Start Date</label>
-                        <input type="date" id="jobStartDate" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="jobEndDate">End Date</label>
-                        <input type="date" id="jobEndDate" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="jobHours">Estimated Hours</label>
-                        <input type="number" id="jobHours" placeholder="e.g., 40" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="jobCrewSize">Required Crew Size</label>
-                        <input type="number" id="jobCrewSize" placeholder="e.g., 3" required>
-                    </div>
-                    <button type="submit">Add Job Site</button>
-                </form>
-                <div class="job-list" id="jobList"></div>
-            </div>
-
+            <!-- Job Assignments -->
             <div class="section full-width">
                 <h2>📋 Job Assignments</h2>
                 <div class="assignment-list" id="assignmentList"></div>
             </div>
 
+            <!-- Gantt Chart -->
             <div class="section full-width">
                 <h2>📊 Schedule & Utilization - Gantt Chart</h2>
                 <div class="gantt-container">
                     <div class="gantt-chart" id="ganttChart"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Button -->
+    <button class="settings-btn" onclick="toggleSettings()">⚙️</button>
+
+    <!-- Settings Modal -->
+    <div class="settings-modal" id="settingsModal">
+        <div class="settings-content">
+            <div class="settings-header">
+                <h2>Settings & Data Management</h2>
+                <button class="close-btn" onclick="toggleSettings()">×</button>
+            </div>
+
+            <!-- Add Worker Collapsible -->
+            <div class="collapsible">
+                <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                    <h3>👷 Add Worker</h3>
+                    <span class="collapsible-icon">▼</span>
+                </div>
+                <div class="collapsible-content">
+                    <div class="collapsible-body">
+                        <form id="workerForm">
+                            <div class="form-group">
+                                <label for="workerName">Worker Name</label>
+                                <input type="text" id="workerName" placeholder="e.g., John Smith" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="workerRole">Role/Certification</label>
+                                <select id="workerRole" required>
+                                    <option value="">Select Role</option>
+                                    <option value="master">Master Electrician</option>
+                                    <option value="journeyman">Journeyman</option>
+                                    <option value="apprentice">Apprentice</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="workerDivision">Division</label>
+                                <select id="workerDivision" required>
+                                    <option value="">Select Division</option>
+                                    <option value="commercial">Commercial</option>
+                                    <option value="residential">Residential</option>
+                                    <option value="both">Both (Cross-divisional)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="workerIsForeman">
+                                    Foreman/Leader
+                                </label>
+                            </div>
+                            <button type="submit">Add Worker</button>
+                        </form>
+                        <div class="worker-list" id="workerList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Add Job Site Collapsible -->
+            <div class="collapsible">
+                <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                    <h3>🏗️ Add Job Site</h3>
+                    <span class="collapsible-icon">▼</span>
+                </div>
+                <div class="collapsible-content">
+                    <div class="collapsible-body">
+                        <form id="jobForm">
+                            <div class="form-group">
+                                <label for="jobName">Project Name</label>
+                                <input type="text" id="jobName" placeholder="e.g., Downtown Office Building" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="jobDivision">Division</label>
+                                <select id="jobDivision" required>
+                                    <option value="">Select Division</option>
+                                    <option value="commercial">Commercial</option>
+                                    <option value="residential">Residential</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="jobLocation">Location</label>
+                                <input type="text" id="jobLocation" placeholder="e.g., 123 Main St" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="jobStartDate">Start Date</label>
+                                <input type="date" id="jobStartDate" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="jobEndDate">End Date</label>
+                                <input type="date" id="jobEndDate" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="jobHours">Estimated Hours</label>
+                                <input type="number" id="jobHours" placeholder="e.g., 40" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="jobCrewSize">Required Crew Size</label>
+                                <input type="number" id="jobCrewSize" placeholder="e.g., 3" required>
+                            </div>
+                            <button type="submit">Add Job Site</button>
+                        </form>
+                        <div class="job-list" id="jobList"></div>
+                    </div>
                 </div>
             </div>
         </div>
