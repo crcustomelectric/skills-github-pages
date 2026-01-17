@@ -8,6 +8,7 @@ let workers = [];
 let jobs = [];
 let assignments = [];
 let currentDivision = 'all'; // all, commercial, residential
+let editingWorkerId = null; // Track which worker is being edited
 
 // ============================================================================
 // UI Helper Functions
@@ -55,15 +56,35 @@ function switchDivision(division) {
 // Add worker form submission
 document.getElementById('workerForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    const worker = {
-        id: Date.now(),
-        name: document.getElementById('workerName').value,
-        role: document.getElementById('workerRole').value,
-        division: document.getElementById('workerDivision').value,
-        isForeman: document.getElementById('workerIsForeman').checked,
-        status: 'available'
-    };
-    workers.push(worker);
+
+    if (editingWorkerId !== null) {
+        // Edit existing worker
+        const worker = workers.find(w => w.id === editingWorkerId);
+        if (worker) {
+            worker.name = document.getElementById('workerName').value;
+            worker.role = document.getElementById('workerRole').value;
+            worker.division = document.getElementById('workerDivision').value;
+            worker.isForeman = document.getElementById('workerIsForeman').checked;
+        }
+        editingWorkerId = null;
+        document.querySelector('#workerForm button[type="submit"]').textContent = 'Add Worker';
+
+        // Remove cancel button if it exists
+        const cancelBtn = document.getElementById('cancelEditWorker');
+        if (cancelBtn) cancelBtn.remove();
+    } else {
+        // Add new worker
+        const worker = {
+            id: Date.now(),
+            name: document.getElementById('workerName').value,
+            role: document.getElementById('workerRole').value,
+            division: document.getElementById('workerDivision').value,
+            isForeman: document.getElementById('workerIsForeman').checked,
+            status: 'available'
+        };
+        workers.push(worker);
+    }
+
     saveData();
     renderWorkers();
     renderManpowerGraph();
@@ -118,7 +139,10 @@ function renderWorkers() {
                 ${worker.isForeman ? '<span class="badge badge-foreman">FOREMAN</span>' : ''}
                 <span class="badge badge-${worker.status}">${worker.status.toUpperCase()}</span>
             </div>
-            <button class="btn-remove" onclick="removeWorker(${worker.id})">Remove</button>
+            <div class="item-actions">
+                <button class="btn-edit" onclick="editWorker(${worker.id})">Edit</button>
+                <button class="btn-remove" onclick="removeWorker(${worker.id})">Remove</button>
+            </div>
         </div>
     `).join('');
 }
@@ -618,6 +642,53 @@ function unassignWorker(jobId, workerId) {
         renderManpowerGraph();
         updateStats();
     }
+}
+
+/**
+ * Edit a worker
+ */
+function editWorker(id) {
+    const worker = workers.find(w => w.id === id);
+    if (!worker) return;
+
+    // Populate form with worker data
+    document.getElementById('workerName').value = worker.name;
+    document.getElementById('workerRole').value = worker.role;
+    document.getElementById('workerDivision').value = worker.division;
+    document.getElementById('workerIsForeman').checked = worker.isForeman;
+
+    // Update submit button text
+    const submitBtn = document.querySelector('#workerForm button[type="submit"]');
+    submitBtn.textContent = 'Update Worker';
+
+    // Add cancel button if it doesn't exist
+    if (!document.getElementById('cancelEditWorker')) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.id = 'cancelEditWorker';
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn-cancel';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.onclick = cancelEditWorker;
+        submitBtn.parentNode.insertBefore(cancelBtn, submitBtn.nextSibling);
+    }
+
+    // Set editing mode
+    editingWorkerId = id;
+
+    // Scroll to form
+    document.querySelector('#workerForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/**
+ * Cancel editing a worker
+ */
+function cancelEditWorker() {
+    editingWorkerId = null;
+    document.getElementById('workerForm').reset();
+    document.querySelector('#workerForm button[type="submit"]').textContent = 'Add Worker';
+
+    const cancelBtn = document.getElementById('cancelEditWorker');
+    if (cancelBtn) cancelBtn.remove();
 }
 
 /**
