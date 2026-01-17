@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CR Custom Electric - Man Loader</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #FF6B00 0%, #FF8C00 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        header p {
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 3px solid #FF6B00;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-card h3 {
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .number {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #FF6B00;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+
+        .section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+
+        .section h2 {
+            color: #1e3c72;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #FF6B00;
+            font-size: 1.5em;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #495057;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 1em;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #FF6B00;
+        }
+
+        button {
+            background: linear-gradient(135deg, #FF6B00 0%, #FF8C00 100%);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 107, 0, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .worker-list, .job-list, .assignment-list {
+            margin-top: 20px;
+        }
+
+        .item-card {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #FF6B00;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .item-card:hover {
+            transform: translateX(5px);
+        }
+
+        .item-info {
+            flex-grow: 1;
+        }
+
+        .item-info strong {
+            color: #1e3c72;
+            font-size: 1.1em;
+        }
+
+        .item-info .details {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .badge-available {
+            background: #28a745;
+            color: white;
+        }
+
+        .badge-assigned {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .badge-journeyman {
+            background: #007bff;
+            color: white;
+        }
+
+        .badge-apprentice {
+            background: #6c757d;
+            color: white;
+        }
+
+        .badge-master {
+            background: #6f42c1;
+            color: white;
+        }
+
+        .btn-remove {
+            background: #dc3545;
+            padding: 6px 12px;
+            font-size: 0.85em;
+            margin: 0 0 0 10px;
+        }
+
+        .btn-assign {
+            background: #28a745;
+            padding: 6px 12px;
+            font-size: 0.85em;
+            margin: 0 0 0 10px;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .assignment-card {
+            background: white;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border-left: 5px solid #28a745;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .assignment-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .assignment-header h3 {
+            color: #1e3c72;
+            font-size: 1.2em;
+        }
+
+        .crew-members {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .crew-member {
+            background: #e9ecef;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .crew-member button {
+            background: #dc3545;
+            padding: 2px 8px;
+            font-size: 0.8em;
+            margin: 0;
+            border-radius: 4px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚡ CR Custom Electric</h1>
+            <p>Crew Management & Job Assignment System</p>
+        </header>
+
+        <div class="dashboard">
+            <div class="stat-card">
+                <h3>Total Workers</h3>
+                <div class="number" id="totalWorkers">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Active Jobs</h3>
+                <div class="number" id="totalJobs">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Workers Assigned</h3>
+                <div class="number" id="workersAssigned">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Utilization Rate</h3>
+                <div class="number" id="utilizationRate">0%</div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="section">
+                <h2>👷 Add Worker</h2>
+                <form id="workerForm">
+                    <div class="form-group">
+                        <label for="workerName">Worker Name</label>
+                        <input type="text" id="workerName" placeholder="e.g., John Smith" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="workerRole">Role/Certification</label>
+                        <select id="workerRole" required>
+                            <option value="">Select Role</option>
+                            <option value="master">Master Electrician</option>
+                            <option value="journeyman">Journeyman</option>
+                            <option value="apprentice">Apprentice</option>
+                        </select>
+                    </div>
+                    <button type="submit">Add Worker</button>
+                </form>
+                <div class="worker-list" id="workerList"></div>
+            </div>
+
+            <div class="section">
+                <h2>🏗️ Add Job Site</h2>
+                <form id="jobForm">
+                    <div class="form-group">
+                        <label for="jobName">Project Name</label>
+                        <input type="text" id="jobName" placeholder="e.g., Downtown Office Building" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="jobLocation">Location</label>
+                        <input type="text" id="jobLocation" placeholder="e.g., 123 Main St" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="jobHours">Estimated Hours</label>
+                        <input type="number" id="jobHours" placeholder="e.g., 40" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="jobCrewSize">Required Crew Size</label>
+                        <input type="number" id="jobCrewSize" placeholder="e.g., 3" required>
+                    </div>
+                    <button type="submit">Add Job Site</button>
+                </form>
+                <div class="job-list" id="jobList"></div>
+            </div>
+
+            <div class="section full-width">
+                <h2>📋 Job Assignments</h2>
+                <div class="assignment-list" id="assignmentList"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data storage
+        let workers = JSON.parse(localStorage.getItem('workers')) || [];
+        let jobs = JSON.parse(localStorage.getItem('jobs')) || [];
+        let assignments = JSON.parse(localStorage.getItem('assignments')) || [];
+
+        // Add worker
+        document.getElementById('workerForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const worker = {
+                id: Date.now(),
+                name: document.getElementById('workerName').value,
+                role: document.getElementById('workerRole').value,
+                status: 'available'
+            };
+            workers.push(worker);
+            saveData();
+            renderWorkers();
+            updateStats();
+            this.reset();
+        });
+
+        // Add job
+        document.getElementById('jobForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const job = {
+                id: Date.now(),
+                name: document.getElementById('jobName').value,
+                location: document.getElementById('jobLocation').value,
+                hours: document.getElementById('jobHours').value,
+                crewSize: document.getElementById('jobCrewSize').value,
+                crew: []
+            };
+            jobs.push(job);
+            saveData();
+            renderJobs();
+            updateStats();
+            this.reset();
+        });
+
+        // Render workers
+        function renderWorkers() {
+            const list = document.getElementById('workerList');
+            if (workers.length === 0) {
+                list.innerHTML = '<div class="empty-state">No workers added yet</div>';
+                return;
+            }
+
+            list.innerHTML = workers.map(worker => `
+                <div class="item-card">
+                    <div class="item-info">
+                        <strong>${worker.name}</strong>
+                        <span class="badge badge-${worker.role}">${worker.role.toUpperCase()}</span>
+                        <span class="badge badge-${worker.status}">${worker.status.toUpperCase()}</span>
+                    </div>
+                    <button class="btn-remove" onclick="removeWorker(${worker.id})">Remove</button>
+                </div>
+            `).join('');
+        }
+
+        // Render jobs
+        function renderJobs() {
+            const list = document.getElementById('jobList');
+            if (jobs.length === 0) {
+                list.innerHTML = '<div class="empty-state">No job sites added yet</div>';
+                return;
+            }
+
+            list.innerHTML = jobs.map(job => `
+                <div class="item-card">
+                    <div class="item-info">
+                        <strong>${job.name}</strong>
+                        <div class="details">${job.location} • ${job.hours}hrs • ${job.crew.length}/${job.crewSize} crew</div>
+                    </div>
+                    <button class="btn-remove" onclick="removeJob(${job.id})">Remove</button>
+                </div>
+            `).join('');
+            renderAssignments();
+        }
+
+        // Render assignments
+        function renderAssignments() {
+            const list = document.getElementById('assignmentList');
+            const activeJobs = jobs.filter(job => job.crew && job.crew.length > 0);
+
+            if (activeJobs.length === 0) {
+                list.innerHTML = '<div class="empty-state">No assignments yet. Add workers to job sites below.</div>';
+                return;
+            }
+
+            list.innerHTML = activeJobs.map(job => {
+                const crewMembers = job.crew.map(workerId => {
+                    const worker = workers.find(w => w.id === workerId);
+                    return worker ? `
+                        <div class="crew-member">
+                            <span>${worker.name} (${worker.role})</span>
+                            <button onclick="unassignWorker(${job.id}, ${workerId})">×</button>
+                        </div>
+                    ` : '';
+                }).join('');
+
+                const availableWorkers = workers.filter(w => w.status === 'available');
+                const needsMoreCrew = job.crew.length < job.crewSize;
+
+                return `
+                    <div class="assignment-card">
+                        <div class="assignment-header">
+                            <h3>${job.name}</h3>
+                            <span>${job.crew.length}/${job.crewSize} Crew Members</span>
+                        </div>
+                        <div class="details" style="color: #6c757d; margin-bottom: 10px;">
+                            📍 ${job.location} • ⏱️ ${job.hours} hours
+                        </div>
+                        <div class="crew-members">
+                            ${crewMembers || '<span style="color: #6c757d;">No crew assigned</span>'}
+                        </div>
+                        ${needsMoreCrew && availableWorkers.length > 0 ? `
+                            <div style="margin-top: 15px;">
+                                <select id="assign-${job.id}" style="width: auto; display: inline-block; margin-right: 10px;">
+                                    <option value="">Select worker to assign</option>
+                                    ${availableWorkers.map(w => `
+                                        <option value="${w.id}">${w.name} (${w.role})</option>
+                                    `).join('')}
+                                </select>
+                                <button class="btn-assign" onclick="assignWorker(${job.id})">Assign to Job</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Assign worker to job
+        function assignWorker(jobId) {
+            const select = document.getElementById(`assign-${jobId}`);
+            const workerId = parseInt(select.value);
+
+            if (!workerId) return;
+
+            const job = jobs.find(j => j.id === jobId);
+            const worker = workers.find(w => w.id === workerId);
+
+            if (job && worker && job.crew.length < job.crewSize) {
+                job.crew.push(workerId);
+                worker.status = 'assigned';
+                saveData();
+                renderWorkers();
+                renderJobs();
+                updateStats();
+            }
+        }
+
+        // Unassign worker from job
+        function unassignWorker(jobId, workerId) {
+            const job = jobs.find(j => j.id === jobId);
+            const worker = workers.find(w => w.id === workerId);
+
+            if (job && worker) {
+                job.crew = job.crew.filter(id => id !== workerId);
+                worker.status = 'available';
+                saveData();
+                renderWorkers();
+                renderJobs();
+                updateStats();
+            }
+        }
+
+        // Remove worker
+        function removeWorker(id) {
+            // Remove from any jobs first
+            jobs.forEach(job => {
+                job.crew = job.crew.filter(wId => wId !== id);
+            });
+            workers = workers.filter(w => w.id !== id);
+            saveData();
+            renderWorkers();
+            renderJobs();
+            updateStats();
+        }
+
+        // Remove job
+        function removeJob(id) {
+            const job = jobs.find(j => j.id === id);
+            // Free up assigned workers
+            if (job && job.crew) {
+                job.crew.forEach(workerId => {
+                    const worker = workers.find(w => w.id === workerId);
+                    if (worker) worker.status = 'available';
+                });
+            }
+            jobs = jobs.filter(j => j.id !== id);
+            saveData();
+            renderWorkers();
+            renderJobs();
+            updateStats();
+        }
+
+        // Update statistics
+        function updateStats() {
+            document.getElementById('totalWorkers').textContent = workers.length;
+            document.getElementById('totalJobs').textContent = jobs.length;
+
+            const assigned = workers.filter(w => w.status === 'assigned').length;
+            document.getElementById('workersAssigned').textContent = assigned;
+
+            const utilization = workers.length > 0 ? Math.round((assigned / workers.length) * 100) : 0;
+            document.getElementById('utilizationRate').textContent = utilization + '%';
+        }
+
+        // Save data to localStorage
+        function saveData() {
+            localStorage.setItem('workers', JSON.stringify(workers));
+            localStorage.setItem('jobs', JSON.stringify(jobs));
+        }
+
+        // Initialize on load
+        renderWorkers();
+        renderJobs();
+        updateStats();
+    </script>
+</body>
+</html>
