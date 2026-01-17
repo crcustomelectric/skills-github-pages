@@ -19,7 +19,7 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Open Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, var(--dark-blue) 0%, var(--primary-blue) 100%);
     min-height: 100vh;
     padding: 20px;
@@ -49,6 +49,10 @@ header {
 .header-logo {
     height: 60px;
     width: auto;
+    background: white;
+    padding: 8px 16px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .header-content {
@@ -705,6 +709,78 @@ button:active {
 .assignment-header h3 {
     color: var(--text-dark);
     font-size: 1.2em;
+}
+
+/* CSV Upload Styles */
+.csv-upload-area {
+    border: 2px dashed var(--border-gray);
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    background: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.csv-upload-area:hover {
+    border-color: var(--primary-blue);
+    background: #f0f8ff;
+}
+
+.csv-upload-area input[type="file"] {
+    display: none;
+}
+
+.upload-icon {
+    font-size: 48px;
+    color: var(--primary-blue);
+    margin-bottom: 10px;
+}
+
+.upload-text {
+    font-size: 14px;
+    color: #666;
+    margin-top: 8px;
+}
+
+.csv-instructions {
+    background: #f0f8ff;
+    border-left: 4px solid var(--primary-blue);
+    padding: 15px;
+    margin-top: 15px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.csv-instructions h4 {
+    color: var(--text-dark);
+    margin-bottom: 8px;
+}
+
+.csv-instructions code {
+    background: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+}
+
+.csv-download-btn {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    margin-top: 10px;
+    transition: background 0.2s ease;
+}
+
+.csv-download-btn:hover {
+    background: #218838;
+    transform: none;
+    box-shadow: none;
 }
 
 /* Responsive Design */

@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CR Custom Electric - Man Loader</title>
 
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+
     <!-- External Stylesheets -->
     <link rel="stylesheet" href="css/styles.css">
 
@@ -201,6 +206,70 @@
                             <button type="submit">Add Job Site</button>
                         </form>
                         <div class="job-list" id="jobList"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Import Workers CSV Collapsible -->
+            <div class="collapsible">
+                <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                    <h3>📤 Import Workers (CSV)</h3>
+                    <span class="collapsible-icon">▼</span>
+                </div>
+                <div class="collapsible-content">
+                    <div class="collapsible-body">
+                        <div class="csv-upload-area" onclick="document.getElementById('workerCSV').click()">
+                            <div class="upload-icon">📁</div>
+                            <div><strong>Click to upload Workers CSV</strong></div>
+                            <div class="upload-text">or drag and drop file here</div>
+                            <input type="file" id="workerCSV" accept=".csv" onchange="importWorkersCSV(event)">
+                        </div>
+                        <div class="csv-instructions">
+                            <h4>Required CSV Format:</h4>
+                            <p><code>name,role,division,isForeman</code></p>
+                            <p style="margin-top: 8px;"><strong>Example:</strong></p>
+                            <p><code>John Smith,journeyman,commercial,true</code></p>
+                            <p><code>Jane Doe,apprentice,residential,false</code></p>
+                            <p><code>Mike Jones,master,both,true</code></p>
+                            <p style="margin-top: 10px; font-size: 0.85em;">
+                                <strong>Role:</strong> master, journeyman, or apprentice<br>
+                                <strong>Division:</strong> commercial, residential, or both<br>
+                                <strong>isForeman:</strong> true or false
+                            </p>
+                            <button class="csv-download-btn" onclick="downloadWorkerTemplate()">Download Template</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Import Jobs CSV Collapsible -->
+            <div class="collapsible">
+                <div class="collapsible-header" onclick="toggleCollapsible(this)">
+                    <h3>📤 Import Jobs (CSV)</h3>
+                    <span class="collapsible-icon">▼</span>
+                </div>
+                <div class="collapsible-content">
+                    <div class="collapsible-body">
+                        <div class="csv-upload-area" onclick="document.getElementById('jobCSV').click()">
+                            <div class="upload-icon">📁</div>
+                            <div><strong>Click to upload Jobs CSV</strong></div>
+                            <div class="upload-text">or drag and drop file here</div>
+                            <input type="file" id="jobCSV" accept=".csv" onchange="importJobsCSV(event)">
+                        </div>
+                        <div class="csv-instructions">
+                            <h4>Required CSV Format:</h4>
+                            <p><code>name,division,location,startDate,endDate,hours,crewSize</code></p>
+                            <p style="margin-top: 8px;"><strong>Example:</strong></p>
+                            <p><code>Downtown Office,commercial,123 Main St,2024-02-01,2024-03-15,160,4</code></p>
+                            <p><code>Smith Residence,residential,456 Oak Ave,2024-02-10,2024-02-28,80,2</code></p>
+                            <p style="margin-top: 10px; font-size: 0.85em;">
+                                <strong>Division:</strong> commercial or residential<br>
+                                <strong>Dates:</strong> YYYY-MM-DD format<br>
+                                <strong>Hours:</strong> total estimated hours<br>
+                                <strong>crewSize:</strong> number of workers needed
+                            </p>
+                            <button class="csv-download-btn" onclick="downloadJobTemplate()">Download Template</button>
+                        </div>
                     </div>
                 </div>
             </div>

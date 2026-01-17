@@ -753,6 +753,196 @@ function initializeData() {
 }
 
 // ============================================================================
+// CSV Import/Export Functions
+// ============================================================================
+
+/**
+ * Import workers from CSV file
+ */
+function importWorkersCSV(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        const lines = text.split('\n');
+
+        let importedCount = 0;
+        let errorCount = 0;
+
+        // Skip header row and process data
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+
+            const [name, role, division, isForeman] = line.split(',').map(s => s.trim());
+
+            // Validate data
+            if (!name || !role || !division) {
+                errorCount++;
+                continue;
+            }
+
+            if (!['master', 'journeyman', 'apprentice'].includes(role)) {
+                console.error(`Invalid role for ${name}: ${role}`);
+                errorCount++;
+                continue;
+            }
+
+            if (!['commercial', 'residential', 'both'].includes(division)) {
+                console.error(`Invalid division for ${name}: ${division}`);
+                errorCount++;
+                continue;
+            }
+
+            // Create worker
+            const worker = {
+                id: Date.now() + i,
+                name: name,
+                role: role,
+                division: division,
+                isForeman: isForeman === 'true',
+                status: 'available'
+            };
+
+            workers.push(worker);
+            importedCount++;
+        }
+
+        saveData();
+        renderWorkers();
+        renderManpowerGraph();
+        updateStats();
+
+        alert(`Import complete!\n✅ Imported: ${importedCount} workers\n${errorCount > 0 ? '❌ Errors: ' + errorCount : ''}`);
+
+        // Reset file input
+        event.target.value = '';
+    };
+
+    reader.readAsText(file);
+}
+
+/**
+ * Import jobs from CSV file
+ */
+function importJobsCSV(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const text = e.target.result;
+        const lines = text.split('\n');
+
+        let importedCount = 0;
+        let errorCount = 0;
+
+        // Skip header row and process data
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+
+            const [name, division, location, startDate, endDate, hours, crewSize] = line.split(',').map(s => s.trim());
+
+            // Validate data
+            if (!name || !division || !location || !startDate || !endDate || !hours || !crewSize) {
+                errorCount++;
+                continue;
+            }
+
+            if (!['commercial', 'residential'].includes(division)) {
+                console.error(`Invalid division for ${name}: ${division}`);
+                errorCount++;
+                continue;
+            }
+
+            // Validate dates
+            if (isNaN(Date.parse(startDate)) || isNaN(Date.parse(endDate))) {
+                console.error(`Invalid dates for ${name}`);
+                errorCount++;
+                continue;
+            }
+
+            // Create job
+            const job = {
+                id: Date.now() + i,
+                name: name,
+                division: division,
+                location: location,
+                startDate: startDate,
+                endDate: endDate,
+                hours: hours,
+                crewSize: crewSize,
+                crew: [],
+                foreman: null
+            };
+
+            jobs.push(job);
+            importedCount++;
+        }
+
+        saveData();
+        renderJobs();
+        renderGantt();
+        renderManpowerGraph();
+        updateStats();
+
+        alert(`Import complete!\n✅ Imported: ${importedCount} jobs\n${errorCount > 0 ? '❌ Errors: ' + errorCount : ''}`);
+
+        // Reset file input
+        event.target.value = '';
+    };
+
+    reader.readAsText(file);
+}
+
+/**
+ * Download worker CSV template
+ */
+function downloadWorkerTemplate() {
+    const csv = `name,role,division,isForeman
+John Smith,journeyman,commercial,true
+Jane Doe,apprentice,residential,false
+Mike Jones,master,both,true
+Sarah Williams,journeyman,commercial,false
+Tom Brown,master,residential,true`;
+
+    downloadCSV(csv, 'worker_template.csv');
+}
+
+/**
+ * Download job CSV template
+ */
+function downloadJobTemplate() {
+    const csv = `name,division,location,startDate,endDate,hours,crewSize
+Downtown Office Building,commercial,123 Main St,2024-02-01,2024-03-15,160,4
+Smith Residence,residential,456 Oak Ave,2024-02-10,2024-02-28,80,2
+Warehouse Expansion,commercial,789 Industrial Pkwy,2024-03-01,2024-04-30,320,6
+Jones House Rewire,residential,321 Elm St,2024-02-15,2024-03-01,60,2`;
+
+    downloadCSV(csv, 'job_template.csv');
+}
+
+/**
+ * Helper function to download CSV
+ */
+function downloadCSV(content, filename) {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// ============================================================================
 // Initialize Application
 // ============================================================================
 
