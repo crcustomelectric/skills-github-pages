@@ -770,28 +770,56 @@ function importWorkersCSV(event) {
 
         let importedCount = 0;
         let errorCount = 0;
+        const errors = [];
+
+        console.log('=== CSV IMPORT: WORKERS ===');
+        console.log(`Total lines in file: ${lines.length}`);
+        console.log('Expected format: name,role,division,isForeman');
+        console.log('Valid roles: master, journeyman, apprentice');
+        console.log('Valid divisions: commercial, residential, both');
+        console.log('Valid isForeman: true, false');
+        console.log('---');
 
         // Skip header row and process data
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
-            if (!line) continue;
+            if (!line) {
+                console.log(`Row ${i + 1}: Skipped (empty line)`);
+                continue;
+            }
 
-            const [name, role, division, isForeman] = line.split(',').map(s => s.trim());
+            const rowNum = i + 1;
+            const parts = line.split(',').map(s => s.trim());
+            const [name, role, division, isForeman] = parts;
+
+            console.log(`Row ${rowNum}: Processing "${line}"`);
+            console.log(`  Parsed as: name="${name}", role="${role}", division="${division}", isForeman="${isForeman}"`);
 
             // Validate data
             if (!name || !role || !division) {
+                const missing = [];
+                if (!name) missing.push('name');
+                if (!role) missing.push('role');
+                if (!division) missing.push('division');
+                const error = `Row ${rowNum}: Missing required fields: ${missing.join(', ')}`;
+                console.error(`❌ ${error}`);
+                errors.push(error);
                 errorCount++;
                 continue;
             }
 
             if (!['master', 'journeyman', 'apprentice'].includes(role)) {
-                console.error(`Invalid role for ${name}: ${role}`);
+                const error = `Row ${rowNum}: Invalid role "${role}" for ${name}. Must be: master, journeyman, or apprentice`;
+                console.error(`❌ ${error}`);
+                errors.push(error);
                 errorCount++;
                 continue;
             }
 
             if (!['commercial', 'residential', 'both'].includes(division)) {
-                console.error(`Invalid division for ${name}: ${division}`);
+                const error = `Row ${rowNum}: Invalid division "${division}" for ${name}. Must be: commercial, residential, or both`;
+                console.error(`❌ ${error}`);
+                errors.push(error);
                 errorCount++;
                 continue;
             }
@@ -808,6 +836,7 @@ function importWorkersCSV(event) {
 
             workers.push(worker);
             importedCount++;
+            console.log(`✅ Row ${rowNum}: Successfully imported ${name}`);
         }
 
         saveData();
@@ -815,7 +844,19 @@ function importWorkersCSV(event) {
         renderManpowerGraph();
         updateStats();
 
-        alert(`Import complete!\n✅ Imported: ${importedCount} workers\n${errorCount > 0 ? '❌ Errors: ' + errorCount : ''}`);
+        console.log('---');
+        console.log(`SUMMARY: ✅ ${importedCount} imported, ❌ ${errorCount} errors`);
+        if (errors.length > 0) {
+            console.log('\nDETAILED ERRORS:');
+            errors.forEach(err => console.log(`  ${err}`));
+        }
+
+        let message = `Import complete!\n✅ Imported: ${importedCount} workers`;
+        if (errorCount > 0) {
+            message += `\n❌ Errors: ${errorCount}\n\nCheck browser console (F12) for detailed error log.`;
+            message += `\n\nFirst error: ${errors[0]}`;
+        }
+        alert(message);
 
         // Reset file input
         event.target.value = '';
@@ -838,29 +879,87 @@ function importJobsCSV(event) {
 
         let importedCount = 0;
         let errorCount = 0;
+        const errors = [];
+
+        console.log('=== CSV IMPORT: JOBS ===');
+        console.log(`Total lines in file: ${lines.length}`);
+        console.log('Expected format: name,division,location,startDate,endDate,hours,crewSize');
+        console.log('Valid divisions: commercial, residential');
+        console.log('Date format: YYYY-MM-DD (e.g., 2024-02-15)');
+        console.log('---');
 
         // Skip header row and process data
         for (let i = 1; i < lines.length; i++) {
             const line = lines[i].trim();
-            if (!line) continue;
+            if (!line) {
+                console.log(`Row ${i + 1}: Skipped (empty line)`);
+                continue;
+            }
 
-            const [name, division, location, startDate, endDate, hours, crewSize] = line.split(',').map(s => s.trim());
+            const rowNum = i + 1;
+            const parts = line.split(',').map(s => s.trim());
+            const [name, division, location, startDate, endDate, hours, crewSize] = parts;
+
+            console.log(`Row ${rowNum}: Processing "${line}"`);
+            console.log(`  Parsed as: name="${name}", division="${division}", location="${location}"`);
+            console.log(`  Dates: start="${startDate}", end="${endDate}"`);
+            console.log(`  Details: hours="${hours}", crewSize="${crewSize}"`);
 
             // Validate data
             if (!name || !division || !location || !startDate || !endDate || !hours || !crewSize) {
+                const missing = [];
+                if (!name) missing.push('name');
+                if (!division) missing.push('division');
+                if (!location) missing.push('location');
+                if (!startDate) missing.push('startDate');
+                if (!endDate) missing.push('endDate');
+                if (!hours) missing.push('hours');
+                if (!crewSize) missing.push('crewSize');
+                const error = `Row ${rowNum}: Missing required fields: ${missing.join(', ')}`;
+                console.error(`❌ ${error}`);
+                errors.push(error);
                 errorCount++;
                 continue;
             }
 
             if (!['commercial', 'residential'].includes(division)) {
-                console.error(`Invalid division for ${name}: ${division}`);
+                const error = `Row ${rowNum}: Invalid division "${division}" for ${name}. Must be: commercial or residential`;
+                console.error(`❌ ${error}`);
+                errors.push(error);
                 errorCount++;
                 continue;
             }
 
             // Validate dates
-            if (isNaN(Date.parse(startDate)) || isNaN(Date.parse(endDate))) {
-                console.error(`Invalid dates for ${name}`);
+            if (isNaN(Date.parse(startDate))) {
+                const error = `Row ${rowNum}: Invalid start date "${startDate}" for ${name}. Use format: YYYY-MM-DD`;
+                console.error(`❌ ${error}`);
+                errors.push(error);
+                errorCount++;
+                continue;
+            }
+
+            if (isNaN(Date.parse(endDate))) {
+                const error = `Row ${rowNum}: Invalid end date "${endDate}" for ${name}. Use format: YYYY-MM-DD`;
+                console.error(`❌ ${error}`);
+                errors.push(error);
+                errorCount++;
+                continue;
+            }
+
+            // Validate numeric fields
+            if (isNaN(parseInt(hours))) {
+                const error = `Row ${rowNum}: Invalid hours "${hours}" for ${name}. Must be a number`;
+                console.error(`❌ ${error}`);
+                errors.push(error);
+                errorCount++;
+                continue;
+            }
+
+            if (isNaN(parseInt(crewSize))) {
+                const error = `Row ${rowNum}: Invalid crew size "${crewSize}" for ${name}. Must be a number`;
+                console.error(`❌ ${error}`);
+                errors.push(error);
                 errorCount++;
                 continue;
             }
@@ -881,6 +980,7 @@ function importJobsCSV(event) {
 
             jobs.push(job);
             importedCount++;
+            console.log(`✅ Row ${rowNum}: Successfully imported ${name}`);
         }
 
         saveData();
@@ -889,7 +989,19 @@ function importJobsCSV(event) {
         renderManpowerGraph();
         updateStats();
 
-        alert(`Import complete!\n✅ Imported: ${importedCount} jobs\n${errorCount > 0 ? '❌ Errors: ' + errorCount : ''}`);
+        console.log('---');
+        console.log(`SUMMARY: ✅ ${importedCount} imported, ❌ ${errorCount} errors`);
+        if (errors.length > 0) {
+            console.log('\nDETAILED ERRORS:');
+            errors.forEach(err => console.log(`  ${err}`));
+        }
+
+        let message = `Import complete!\n✅ Imported: ${importedCount} jobs`;
+        if (errorCount > 0) {
+            message += `\n❌ Errors: ${errorCount}\n\nCheck browser console (F12) for detailed error log.`;
+            message += `\n\nFirst error: ${errors[0]}`;
+        }
+        alert(message);
 
         // Reset file input
         event.target.value = '';
