@@ -75,10 +75,10 @@ const firebaseConfig = {
 
 8. **Copy this entire configuration object**
 
-### 5. Update Your index.html File
+### 5. Update Your Firebase Configuration File
 
-1. Open `index.html` in a text editor
-2. Find this section near the top of the `<script>` tag:
+1. Open `js/firebase-config.js` in a text editor
+2. Find the `firebaseConfig` object:
 
 ```javascript
 // Firebase Configuration
@@ -102,7 +102,7 @@ const firebaseConfig = {
 
 1. Commit and push your changes to GitHub:
    ```bash
-   git add index.html
+   git add js/firebase-config.js
    git commit -m "Add Firebase configuration for team collaboration"
    git push origin main
    ```
