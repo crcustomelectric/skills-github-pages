@@ -292,6 +292,118 @@
             font-style: italic;
         }
 
+        .gantt-container {
+            overflow-x: auto;
+            margin-top: 20px;
+        }
+
+        .gantt-chart {
+            min-width: 800px;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+        }
+
+        .gantt-header {
+            display: flex;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #FF6B00;
+            padding-bottom: 10px;
+        }
+
+        .gantt-label {
+            width: 200px;
+            font-weight: bold;
+            color: #1e3c72;
+            flex-shrink: 0;
+        }
+
+        .gantt-timeline {
+            flex-grow: 1;
+            display: flex;
+            position: relative;
+        }
+
+        .timeline-marker {
+            flex: 1;
+            text-align: center;
+            font-size: 0.85em;
+            color: #6c757d;
+            padding: 5px;
+            border-right: 1px solid #e9ecef;
+        }
+
+        .timeline-marker:last-child {
+            border-right: none;
+        }
+
+        .gantt-row {
+            display: flex;
+            margin-bottom: 12px;
+            align-items: center;
+            min-height: 50px;
+        }
+
+        .gantt-row-label {
+            width: 200px;
+            flex-shrink: 0;
+            padding-right: 15px;
+        }
+
+        .gantt-row-label strong {
+            display: block;
+            color: #1e3c72;
+            font-size: 1em;
+            margin-bottom: 3px;
+        }
+
+        .gantt-row-label .dates {
+            font-size: 0.8em;
+            color: #6c757d;
+        }
+
+        .gantt-bar-container {
+            flex-grow: 1;
+            position: relative;
+            height: 50px;
+        }
+
+        .gantt-bar {
+            position: absolute;
+            height: 100%;
+            background: linear-gradient(135deg, #FF6B00 0%, #FF8C00 100%);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .gantt-bar:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .gantt-bar-content {
+            color: white;
+            font-size: 0.85em;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .worker-badge-small {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.3);
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 5px;
+            font-size: 0.75em;
+        }
+
         @media (max-width: 768px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -299,6 +411,10 @@
 
             .dashboard {
                 grid-template-columns: 1fr;
+            }
+
+            .gantt-label, .gantt-row-label {
+                width: 150px;
             }
         }
     </style>
@@ -363,6 +479,14 @@
                         <input type="text" id="jobLocation" placeholder="e.g., 123 Main St" required>
                     </div>
                     <div class="form-group">
+                        <label for="jobStartDate">Start Date</label>
+                        <input type="date" id="jobStartDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="jobEndDate">End Date</label>
+                        <input type="date" id="jobEndDate" required>
+                    </div>
+                    <div class="form-group">
                         <label for="jobHours">Estimated Hours</label>
                         <input type="number" id="jobHours" placeholder="e.g., 40" required>
                     </div>
@@ -378,6 +502,13 @@
             <div class="section full-width">
                 <h2>📋 Job Assignments</h2>
                 <div class="assignment-list" id="assignmentList"></div>
+            </div>
+
+            <div class="section full-width">
+                <h2>📊 Schedule & Utilization - Gantt Chart</h2>
+                <div class="gantt-container">
+                    <div class="gantt-chart" id="ganttChart"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -411,6 +542,8 @@
                 id: Date.now(),
                 name: document.getElementById('jobName').value,
                 location: document.getElementById('jobLocation').value,
+                startDate: document.getElementById('jobStartDate').value,
+                endDate: document.getElementById('jobEndDate').value,
                 hours: document.getElementById('jobHours').value,
                 crewSize: document.getElementById('jobCrewSize').value,
                 crew: []
@@ -418,6 +551,7 @@
             jobs.push(job);
             saveData();
             renderJobs();
+            renderGantt();
             updateStats();
             this.reset();
         });
@@ -447,19 +581,33 @@
             const list = document.getElementById('jobList');
             if (jobs.length === 0) {
                 list.innerHTML = '<div class="empty-state">No job sites added yet</div>';
+                renderGantt();
                 return;
             }
 
-            list.innerHTML = jobs.map(job => `
-                <div class="item-card">
-                    <div class="item-info">
-                        <strong>${job.name}</strong>
-                        <div class="details">${job.location} • ${job.hours}hrs • ${job.crew.length}/${job.crewSize} crew</div>
+            list.innerHTML = jobs.map(job => {
+                const dateRange = job.startDate && job.endDate
+                    ? `${formatDate(job.startDate)} - ${formatDate(job.endDate)}`
+                    : 'No dates set';
+                return `
+                    <div class="item-card">
+                        <div class="item-info">
+                            <strong>${job.name}</strong>
+                            <div class="details">${job.location} • ${dateRange} • ${job.hours}hrs • ${job.crew.length}/${job.crewSize} crew</div>
+                        </div>
+                        <button class="btn-remove" onclick="removeJob(${job.id})">Remove</button>
                     </div>
-                    <button class="btn-remove" onclick="removeJob(${job.id})">Remove</button>
-                </div>
-            `).join('');
+                `;
+            }).join('');
             renderAssignments();
+            renderGantt();
+        }
+
+        // Format date for display
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         }
 
         // Render assignments
@@ -530,6 +678,7 @@
                 saveData();
                 renderWorkers();
                 renderJobs();
+                renderGantt();
                 updateStats();
             }
         }
@@ -545,6 +694,7 @@
                 saveData();
                 renderWorkers();
                 renderJobs();
+                renderGantt();
                 updateStats();
             }
         }
@@ -559,6 +709,7 @@
             saveData();
             renderWorkers();
             renderJobs();
+            renderGantt();
             updateStats();
         }
 
@@ -576,6 +727,7 @@
             saveData();
             renderWorkers();
             renderJobs();
+            renderGantt();
             updateStats();
         }
 
@@ -595,6 +747,86 @@
         function saveData() {
             localStorage.setItem('workers', JSON.stringify(workers));
             localStorage.setItem('jobs', JSON.stringify(jobs));
+        }
+
+        // Render Gantt Chart
+        function renderGantt() {
+            const chart = document.getElementById('ganttChart');
+
+            if (jobs.length === 0) {
+                chart.innerHTML = '<div class="empty-state">No jobs to display. Add jobs with start and end dates to see the schedule.</div>';
+                return;
+            }
+
+            // Filter jobs with dates
+            const jobsWithDates = jobs.filter(job => job.startDate && job.endDate);
+
+            if (jobsWithDates.length === 0) {
+                chart.innerHTML = '<div class="empty-state">No scheduled jobs yet. Add start and end dates to jobs to see the Gantt chart.</div>';
+                return;
+            }
+
+            // Calculate timeline range
+            const allDates = jobsWithDates.flatMap(job => [new Date(job.startDate), new Date(job.endDate)]);
+            const minDate = new Date(Math.min(...allDates));
+            const maxDate = new Date(Math.max(...allDates));
+
+            // Add padding to timeline
+            minDate.setDate(minDate.getDate() - 2);
+            maxDate.setDate(maxDate.getDate() + 2);
+
+            const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24));
+
+            // Generate timeline markers (show every few days depending on range)
+            const markerInterval = totalDays > 60 ? 7 : totalDays > 30 ? 5 : totalDays > 14 ? 3 : 1;
+            const markers = [];
+            let currentDate = new Date(minDate);
+
+            while (currentDate <= maxDate) {
+                markers.push(new Date(currentDate));
+                currentDate.setDate(currentDate.getDate() + markerInterval);
+            }
+
+            // Build Gantt header
+            let ganttHTML = '<div class="gantt-header">';
+            ganttHTML += '<div class="gantt-label">Project / Workers</div>';
+            ganttHTML += '<div class="gantt-timeline">';
+            markers.forEach(marker => {
+                ganttHTML += `<div class="timeline-marker">${formatDate(marker.toISOString().split('T')[0])}</div>`;
+            });
+            ganttHTML += '</div></div>';
+
+            // Build Gantt rows
+            jobsWithDates.forEach(job => {
+                const jobStart = new Date(job.startDate);
+                const jobEnd = new Date(job.endDate);
+
+                // Calculate position and width
+                const startOffset = ((jobStart - minDate) / (maxDate - minDate)) * 100;
+                const duration = ((jobEnd - jobStart) / (maxDate - minDate)) * 100;
+
+                // Get crew info
+                const crewInfo = job.crew.map(wId => {
+                    const worker = workers.find(w => w.id === wId);
+                    return worker ? worker.name.split(' ')[0] : '';
+                }).filter(n => n).join(', ');
+
+                ganttHTML += '<div class="gantt-row">';
+                ganttHTML += '<div class="gantt-row-label">';
+                ganttHTML += `<strong>${job.name}</strong>`;
+                ganttHTML += `<div class="dates">${formatDate(job.startDate)} - ${formatDate(job.endDate)}</div>`;
+                ganttHTML += '</div>';
+                ganttHTML += '<div class="gantt-bar-container">';
+                ganttHTML += `<div class="gantt-bar" style="left: ${startOffset}%; width: ${duration}%;">`;
+                ganttHTML += '<div class="gantt-bar-content">';
+                ganttHTML += `${job.crew.length}/${job.crewSize} crew`;
+                if (crewInfo) {
+                    ganttHTML += `<span class="worker-badge-small">${crewInfo}</span>`;
+                }
+                ganttHTML += '</div></div></div></div>';
+            });
+
+            chart.innerHTML = ganttHTML;
         }
 
         // Initialize on load
