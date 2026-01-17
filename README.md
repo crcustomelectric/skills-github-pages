@@ -24,7 +24,7 @@ A dynamic crew management and job assignment system for commercial electrical co
 - **Validation**: Prevents project assignment without proper leadership
 
 ### Worker Management
-- **Role-based Classification**: Master Electrician, Journeyman, Apprentice
+- **Role-based Classification**: Foreman, Journeyman, Apprentice
 - **Division Assignment**: Commercial, Residential, or Both (cross-divisional)
 - **Foreman Designation**: Mark workers as foreman/leaders
 - **Easy Add/Edit/Delete**: Manage your workforce through intuitive interface
@@ -66,13 +66,13 @@ A dynamic crew management and job assignment system for commercial electrical co
 ### Workers CSV
 ```csv
 name,role,division,isForeman
-John Smith,journeyman,commercial,true
+John Smith,journeyman,commercial,false
 Jane Doe,apprentice,residential,false
-Mike Jones,master,both,true
+Mike Jones,foreman,both,true
 ```
 
 **Fields:**
-- `role`: master, journeyman, or apprentice
+- `role`: foreman, journeyman, or apprentice
 - `division`: commercial, residential, or both
 - `isForeman`: true or false
 

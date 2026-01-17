@@ -846,7 +846,7 @@ function importWorkersCSV(event) {
         console.log('=== CSV IMPORT: WORKERS ===');
         console.log(`Total lines in file: ${lines.length}`);
         console.log('Expected format: name,role,division,isForeman');
-        console.log('Valid roles: master, journeyman, apprentice');
+        console.log('Valid roles: foreman, journeyman, apprentice');
         console.log('Valid divisions: commercial, residential, both');
         console.log('Valid isForeman: true, false');
         console.log('---');
@@ -879,8 +879,8 @@ function importWorkersCSV(event) {
                 continue;
             }
 
-            if (!['master', 'journeyman', 'apprentice'].includes(role)) {
-                const error = `Row ${rowNum}: Invalid role "${role}" for ${name}. Must be: master, journeyman, or apprentice`;
+            if (!['foreman', 'journeyman', 'apprentice'].includes(role)) {
+                const error = `Row ${rowNum}: Invalid role "${role}" for ${name}. Must be: foreman, journeyman, or apprentice`;
                 console.error(`❌ ${error}`);
                 errors.push(error);
                 errorCount++;
@@ -1086,11 +1086,11 @@ function importJobsCSV(event) {
  */
 function downloadWorkerTemplate() {
     const csv = `name,role,division,isForeman
-John Smith,journeyman,commercial,true
+John Smith,journeyman,commercial,false
 Jane Doe,apprentice,residential,false
-Mike Jones,master,both,true
+Mike Jones,foreman,both,true
 Sarah Williams,journeyman,commercial,false
-Tom Brown,master,residential,true`;
+Tom Brown,foreman,residential,true`;
 
     downloadCSV(csv, 'worker_template.csv');
 }
