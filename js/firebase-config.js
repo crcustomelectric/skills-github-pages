@@ -3,13 +3,12 @@
 // See FIREBASE_SETUP.md for instructions
 
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDRyuFZAM-U70-cFlXJom3IHb5UhSMIYrI",
+  authDomain: "manloader-ab285.firebaseapp.com",
+  projectId: "manloader-ab285",
+  storageBucket: "manloader-ab285.firebasestorage.app",
+  messagingSenderId: "737435338955",
+  appId: "1:737435338955:web:fd574b022c925f3b01734e"
 };
 
 // Initialize Firebase
