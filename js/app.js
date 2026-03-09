@@ -1,59 +1,39 @@
 /**
  * CR Custom Electric - Man Loader Application
- * Enhanced with foreman tracking, divisions, and manpower forecasting
+ * Simplified 3-Week Daily Schedule with Drag & Drop
  */
 
 // Data storage
 let workers = [];
 let jobs = [];
-let assignments = [];
-let weeklySchedule = {}; // key: "jobId_weekStart", value: { demand, assigned: [] }
-let currentDivision = 'all'; // all, commercial, residential
-let editingWorkerId = null; // Track which worker is being edited
+let dailySchedule = {}; // key: "jobId_dateString", value: { demand, assigned: [] }
 let scheduleWeekOffset = 0; // weeks from current week for 3-week lookahead
 
 // Drag state for schedule
 let draggingWorkerId = null;
 let draggingFromJob = null;
-let draggingFromWeek = null;
+let draggingFromDate = null;
 
 // ============================================================================
-// UI Helper Functions
+// Modal Functions
 // ============================================================================
 
-/**
- * Toggle settings modal
- */
-function toggleSettings() {
-    const modal = document.getElementById('settingsModal');
-    modal.classList.toggle('active');
+function showAddWorkerModal() {
+    document.getElementById('addWorkerModal').classList.add('active');
 }
 
-/**
- * Toggle collapsible sections
- */
-function toggleCollapsible(header) {
-    const collapsible = header.parentElement;
-    collapsible.classList.toggle('active');
+function closeAddWorkerModal() {
+    document.getElementById('addWorkerModal').classList.remove('active');
+    document.getElementById('workerForm').reset();
 }
 
-/**
- * Switch division view
- */
-function switchDivision(division) {
-    currentDivision = division;
+function showAddJobModal() {
+    document.getElementById('addJobModal').classList.add('active');
+}
 
-    // Update tab styling
-    document.querySelectorAll('.division-tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    event.target.classList.add('active');
-
-    // Re-render all views
-    renderAssignments();
-    renderGantt();
-    renderManpowerGraph();
-    updateStats();
+function closeAddJobModal() {
+    document.getElementById('addJobModal').classList.remove('active');
+    document.getElementById('jobForm').reset();
 }
 
 // ============================================================================
@@ -64,63 +44,38 @@ function switchDivision(division) {
 document.getElementById('workerForm').addEventListener('submit', function(e) {
     e.preventDefault();
 
-    if (editingWorkerId !== null) {
-        // Edit existing worker
-        const worker = workers.find(w => w.id === editingWorkerId);
-        if (worker) {
-            worker.name = document.getElementById('workerName').value;
-            worker.role = document.getElementById('workerRole').value;
-            worker.division = document.getElementById('workerDivision').value;
-            worker.isForeman = document.getElementById('workerIsForeman').checked;
-        }
-        editingWorkerId = null;
-        document.querySelector('#workerForm button[type="submit"]').textContent = 'Add Worker';
+    const worker = {
+        id: Date.now(),
+        name: document.getElementById('workerName').value,
+        role: document.getElementById('workerRole').value,
+        division: document.getElementById('workerDivision').value,
+        isForeman: document.getElementById('workerRole').value === 'foreman'
+    };
 
-        // Remove cancel button if it exists
-        const cancelBtn = document.getElementById('cancelEditWorker');
-        if (cancelBtn) cancelBtn.remove();
-    } else {
-        // Add new worker
-        const worker = {
-            id: Date.now(),
-            name: document.getElementById('workerName').value,
-            role: document.getElementById('workerRole').value,
-            division: document.getElementById('workerDivision').value,
-            isForeman: document.getElementById('workerIsForeman').checked,
-            status: 'available'
-        };
-        workers.push(worker);
-    }
-
+    workers.push(worker);
     saveData();
     renderWorkers();
-    renderManpowerGraph();
-    updateStats();
-    this.reset();
+    renderSchedule();
+    closeAddWorkerModal();
 });
 
 // Add job form submission
 document.getElementById('jobForm').addEventListener('submit', function(e) {
     e.preventDefault();
+
     const job = {
         id: Date.now(),
         name: document.getElementById('jobName').value,
         division: document.getElementById('jobDivision').value,
         location: document.getElementById('jobLocation').value,
-        startDate: document.getElementById('jobStartDate').value,
-        endDate: document.getElementById('jobEndDate').value,
-        hours: document.getElementById('jobHours').value,
-        crewSize: document.getElementById('jobCrewSize').value,
-        crew: [],
-        foreman: null
+        active: true
     };
+
     jobs.push(job);
     saveData();
     renderJobs();
-    renderGantt();
-    renderManpowerGraph();
-    updateStats();
-    this.reset();
+    renderSchedule();
+    closeAddJobModal();
 });
 
 // ============================================================================
@@ -128,10 +83,12 @@ document.getElementById('jobForm').addEventListener('submit', function(e) {
 // ============================================================================
 
 /**
- * Render the workers list
+ * Render the workers list in Add Worker modal
  */
 function renderWorkers() {
     const list = document.getElementById('workerList');
+    if (!list) return;
+
     if (workers.length === 0) {
         list.innerHTML = '<div class="empty-state">No workers added yet</div>';
         return;
@@ -141,706 +98,74 @@ function renderWorkers() {
         <div class="item-card">
             <div class="item-info">
                 <strong>${worker.name}</strong>
-                <span class="badge badge-${worker.role}">${worker.role.toUpperCase()}</span>
-                <span class="badge badge-${worker.division}">${worker.division.toUpperCase()}</span>
-                ${worker.isForeman ? '<span class="badge badge-foreman">FOREMAN</span>' : ''}
-                <span class="badge badge-${worker.status}">${worker.status.toUpperCase()}</span>
+                <span class="badge badge-${worker.role}">${worker.role}</span>
+                <span class="badge badge-${worker.division}">${worker.division}</span>
             </div>
-            <div class="item-actions">
-                <button class="btn-edit" onclick="editWorker(${worker.id})">Edit</button>
-                <button class="btn-remove" onclick="removeWorker(${worker.id})">Remove</button>
-            </div>
+            <button class="btn-remove" onclick="removeWorker(${worker.id})">Remove</button>
         </div>
     `).join('');
 }
 
 /**
- * Render the jobs list
+ * Render the jobs list in Add Job modal
  */
 function renderJobs() {
     const list = document.getElementById('jobList');
+    if (!list) return;
+
     if (jobs.length === 0) {
-        list.innerHTML = '<div class="empty-state">No job sites added yet</div>';
-        renderGantt();
+        list.innerHTML = '<div class="empty-state">No jobs added yet</div>';
         return;
     }
 
-    list.innerHTML = jobs.map(job => {
-        const dateRange = job.startDate && job.endDate
-            ? `${formatDate(job.startDate)} - ${formatDate(job.endDate)}`
-            : 'No dates set';
-        const foremanName = job.foreman ? workers.find(w => w.id === job.foreman)?.name || 'None' : 'None';
-        const needsForeman = !job.foreman;
-
-        return `
-            <div class="item-card">
-                <div class="item-info">
-                    <strong>${job.name}</strong>
-                    <span class="badge badge-${job.division}">${job.division.toUpperCase()}</span>
-                    ${needsForeman ? '<span class="badge" style="background: #FFA726;">⚠ NO FOREMAN</span>' : ''}
-                    <div class="details">
-                        ${job.location} • ${dateRange} • ${job.hours}hrs • ${job.crew.length}/${job.crewSize} crew • Foreman: ${foremanName}
-                    </div>
-                </div>
-                <button class="btn-remove" onclick="removeJob(${job.id})">Remove</button>
+    list.innerHTML = jobs.map(job => `
+        <div class="item-card">
+            <div class="item-info">
+                <strong>${job.name}</strong>
+                <span class="badge badge-${job.division}">${job.division}</span>
+                <div class="details">${job.location}</div>
             </div>
-        `;
-    }).join('');
-    renderAssignments();
-    renderGantt();
-}
-
-/**
- * Render the job assignments section
- */
-function renderAssignments() {
-    const list = document.getElementById('assignmentList');
-
-    // Filter jobs by division
-    let filteredJobs = jobs;
-    if (currentDivision !== 'all') {
-        filteredJobs = jobs.filter(job => job.division === currentDivision);
-    }
-
-    const activeJobs = filteredJobs.filter(job => job.crew && job.crew.length > 0 || job.foreman);
-
-    if (activeJobs.length === 0) {
-        list.innerHTML = '<div class="empty-state">No assignments yet. Assign workers and foremen to job sites.</div>';
-        return;
-    }
-
-    list.innerHTML = activeJobs.map(job => {
-        const crewMembers = job.crew.map(workerId => {
-            const worker = workers.find(w => w.id === workerId);
-            return worker ? `
-                <div class="crew-member">
-                    <span>${worker.name} (${worker.role})${worker.isForeman ? ' 👷‍♂️' : ''}</span>
-                    <button onclick="unassignWorker(${job.id}, ${workerId})">×</button>
-                </div>
-            ` : '';
-        }).join('');
-
-        // Get available workers for this job's division
-        const availableWorkers = workers.filter(w => {
-            if (w.status !== 'available') return false;
-            if (w.division === 'both') return true;
-            return w.division === job.division;
-        });
-
-        // Get available foremen for this job's division
-        const availableForemen = workers.filter(w => {
-            if (!w.isForeman) return false;
-            if (w.status !== 'available' && job.foreman !== w.id) return false;
-            if (w.division === 'both') return true;
-            return w.division === job.division;
-        });
-
-        const needsMoreCrew = job.crew.length < job.crewSize;
-        const needsForeman = !job.foreman;
-        const foremanWorker = job.foreman ? workers.find(w => w.id === job.foreman) : null;
-
-        return `
-            <div class="assignment-card">
-                <div class="assignment-header">
-                    <h3>${job.name}</h3>
-                    <span class="badge badge-${job.division}">${job.division.toUpperCase()}</span>
-                    <span>${job.crew.length}/${job.crewSize} Crew Members</span>
-                </div>
-                <div class="details" style="color: #6c757d; margin-bottom: 10px;">
-                    📍 ${job.location} • ⏱️ ${job.hours} hours • ${formatDate(job.startDate)} - ${formatDate(job.endDate)}
-                </div>
-
-                <!-- Foreman Assignment -->
-                <div style="margin-bottom: 15px; padding: 10px; background: ${needsForeman ? '#FFF3CD' : '#D4EDDA'}; border-radius: 6px;">
-                    <strong>👷‍♂️ Foreman: </strong>
-                    ${foremanWorker ? `
-                        ${foremanWorker.name} (${foremanWorker.role})
-                        <button class="btn-remove" style="margin-left: 10px;" onclick="unassignForeman(${job.id})">Remove</button>
-                    ` : `
-                        <span style="color: #856404;">⚠ No foreman assigned - project cannot run!</span>
-                    `}
-                    ${needsForeman && availableForemen.length > 0 ? `
-                        <div style="margin-top: 10px;">
-                            <select id="assign-foreman-${job.id}" style="width: auto; display: inline-block; margin-right: 10px;">
-                                <option value="">Select foreman</option>
-                                ${availableForemen.map(w => `
-                                    <option value="${w.id}">${w.name} (${w.role} - ${w.division})</option>
-                                `).join('')}
-                            </select>
-                            <button class="btn-assign" onclick="assignForeman(${job.id})">Assign Foreman</button>
-                        </div>
-                    ` : ''}
-                </div>
-
-                <!-- Crew Members -->
-                <div class="crew-members">
-                    ${crewMembers || '<span style="color: #6c757d;">No crew assigned</span>'}
-                </div>
-
-                ${needsMoreCrew && availableWorkers.length > 0 ? `
-                    <div style="margin-top: 15px;">
-                        <select id="assign-${job.id}" style="width: auto; display: inline-block; margin-right: 10px;">
-                            <option value="">Select worker to assign</option>
-                            ${availableWorkers.map(w => `
-                                <option value="${w.id}">${w.name} (${w.role} - ${w.division})${w.isForeman ? ' 👷‍♂️' : ''}</option>
-                            `).join('')}
-                        </select>
-                        <button class="btn-assign" onclick="assignWorker(${job.id})">Assign to Job</button>
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    }).join('');
-}
-
-/**
- * Render the Gantt chart
- */
-function renderGantt() {
-    const chart = document.getElementById('ganttChart');
-
-    // Filter jobs by division
-    let filteredJobs = jobs;
-    if (currentDivision !== 'all') {
-        filteredJobs = jobs.filter(job => job.division === currentDivision);
-    }
-
-    if (filteredJobs.length === 0) {
-        chart.innerHTML = '<div class="empty-state">No jobs to display. Add jobs with start and end dates to see the schedule.</div>';
-        return;
-    }
-
-    // Filter jobs with dates
-    const jobsWithDates = filteredJobs.filter(job => job.startDate && job.endDate);
-
-    if (jobsWithDates.length === 0) {
-        chart.innerHTML = '<div class="empty-state">No scheduled jobs yet. Add start and end dates to jobs to see the Gantt chart.</div>';
-        return;
-    }
-
-    // Calculate timeline range
-    const allDates = jobsWithDates.flatMap(job => [new Date(job.startDate), new Date(job.endDate)]);
-    const minDate = new Date(Math.min(...allDates));
-    const maxDate = new Date(Math.max(...allDates));
-
-    // Add padding to timeline
-    minDate.setDate(minDate.getDate() - 2);
-    maxDate.setDate(maxDate.getDate() + 2);
-
-    const totalDays = Math.ceil((maxDate - minDate) / (1000 * 60 * 60 * 24));
-
-    // Generate timeline markers
-    const markerInterval = totalDays > 60 ? 7 : totalDays > 30 ? 5 : totalDays > 14 ? 3 : 1;
-    const markers = [];
-    let currentDate = new Date(minDate);
-
-    while (currentDate <= maxDate) {
-        markers.push(new Date(currentDate));
-        currentDate.setDate(currentDate.getDate() + markerInterval);
-    }
-
-    // Build Gantt header
-    let ganttHTML = '<div class="gantt-header">';
-    ganttHTML += '<div class="gantt-label">Project / Workers</div>';
-    ganttHTML += '<div class="gantt-timeline">';
-    markers.forEach(marker => {
-        ganttHTML += `<div class="timeline-marker">${formatDate(marker.toISOString().split('T')[0])}</div>`;
-    });
-    ganttHTML += '</div></div>';
-
-    // Build Gantt rows
-    jobsWithDates.forEach(job => {
-        const jobStart = new Date(job.startDate);
-        const jobEnd = new Date(job.endDate);
-
-        // Calculate position and width
-        const startOffset = ((jobStart - minDate) / (maxDate - minDate)) * 100;
-        const duration = ((jobEnd - jobStart) / (maxDate - minDate)) * 100;
-
-        // Get crew info
-        const crewInfo = job.crew.map(wId => {
-            const worker = workers.find(w => w.id === wId);
-            return worker ? worker.name.split(' ')[0] : '';
-        }).filter(n => n).join(', ');
-
-        const foremanWorker = job.foreman ? workers.find(w => w.id === job.foreman) : null;
-        const foremanName = foremanWorker ? '👷‍♂️' + foremanWorker.name.split(' ')[0] : '⚠️';
-
-        ganttHTML += '<div class="gantt-row">';
-        ganttHTML += '<div class="gantt-row-label">';
-        ganttHTML += `<strong>${job.name}</strong>`;
-        ganttHTML += `<div class="dates">${formatDate(job.startDate)} - ${formatDate(job.endDate)}</div>`;
-        ganttHTML += '</div>';
-        ganttHTML += '<div class="gantt-bar-container">';
-        ganttHTML += `<div class="gantt-bar ${job.division}" style="left: ${startOffset}%; width: ${duration}%;">`;
-        ganttHTML += '<div class="gantt-bar-content">';
-        ganttHTML += `${foremanName} • ${job.crew.length}/${job.crewSize}`;
-        if (crewInfo) {
-            ganttHTML += `<span class="worker-badge-small">${crewInfo}</span>`;
-        }
-        ganttHTML += '</div></div></div></div>';
-    });
-
-    chart.innerHTML = ganttHTML;
-}
-
-/**
- * Render manpower needs graph over time
- */
-function renderManpowerGraph() {
-    const canvas = document.getElementById('manpowerChart');
-    const ctx = canvas.getContext('2d');
-
-    // Set canvas size
-    canvas.width = canvas.offsetWidth;
-    canvas.height = 300;
-
-    // Filter jobs by division
-    let filteredJobs = jobs;
-    if (currentDivision !== 'all') {
-        filteredJobs = jobs.filter(job => job.division === currentDivision);
-    }
-
-    // Get date range
-    const jobsWithDates = filteredJobs.filter(job => job.startDate && job.endDate);
-
-    if (jobsWithDates.length === 0) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#6c757d';
-        ctx.font = '16px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('No scheduled jobs to display', canvas.width / 2, canvas.height / 2);
-        return;
-    }
-
-    const allDates = jobsWithDates.flatMap(job => [new Date(job.startDate), new Date(job.endDate)]);
-    const minDate = new Date(Math.min(...allDates));
-    const maxDate = new Date(Math.max(...allDates));
-
-    // Calculate manpower needs for each day
-    const dailyNeeds = [];
-    let currentDate = new Date(minDate);
-
-    while (currentDate <= maxDate) {
-        const dateStr = currentDate.toISOString().split('T')[0];
-        let workersNeeded = 0;
-
-        jobsWithDates.forEach(job => {
-            const jobStart = new Date(job.startDate);
-            const jobEnd = new Date(job.endDate);
-
-            if (currentDate >= jobStart && currentDate <= jobEnd) {
-                workersNeeded += parseInt(job.crewSize);
-            }
-        });
-
-        dailyNeeds.push({
-            date: new Date(currentDate),
-            needed: workersNeeded
-        });
-
-        currentDate.setDate(currentDate.getDate() + 1);
-    }
-
-    // Count available workers
-    const availableWorkersCount = workers.filter(w => {
-        if (currentDivision === 'all') return true;
-        return w.division === currentDivision || w.division === 'both';
-    }).length;
-
-    // Draw graph
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    const padding = 40;
-    const graphWidth = canvas.width - padding * 2;
-    const graphHeight = canvas.height - padding * 2;
-
-    const maxWorkers = Math.max(...dailyNeeds.map(d => d.needed), availableWorkersCount) + 2;
-    const xStep = graphWidth / (dailyNeeds.length - 1 || 1);
-
-    // Draw axes
-    ctx.strokeStyle = '#dee2e6';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(padding, padding);
-    ctx.lineTo(padding, canvas.height - padding);
-    ctx.lineTo(canvas.width - padding, canvas.height - padding);
-    ctx.stroke();
-
-    // Draw available workers line
-    const availableLine = canvas.height - padding - (availableWorkersCount / maxWorkers) * graphHeight;
-    ctx.strokeStyle = '#28a745';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    ctx.moveTo(padding, availableLine);
-    ctx.lineTo(canvas.width - padding, availableLine);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Draw label for available workers
-    ctx.fillStyle = '#28a745';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'right';
-    ctx.fillText(`Available: ${availableWorkersCount}`, padding - 5, availableLine + 4);
-
-    // Draw needed workers line
-    ctx.strokeStyle = '#0056A0';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-
-    dailyNeeds.forEach((day, i) => {
-        const x = padding + i * xStep;
-        const y = canvas.height - padding - (day.needed / maxWorkers) * graphHeight;
-
-        if (i === 0) {
-            ctx.moveTo(x, y);
-        } else {
-            ctx.lineTo(x, y);
-        }
-    });
-
-    ctx.stroke();
-
-    // Fill shortage areas
-    ctx.fillStyle = 'rgba(211, 47, 47, 0.2)';
-    ctx.beginPath();
-
-    dailyNeeds.forEach((day, i) => {
-        const x = padding + i * xStep;
-        const neededY = canvas.height - padding - (day.needed / maxWorkers) * graphHeight;
-
-        if (day.needed > availableWorkersCount) {
-            if (i === 0) {
-                ctx.moveTo(x, availableLine);
-            } else {
-                ctx.lineTo(x, availableLine);
-            }
-        }
-    });
-
-    for (let i = dailyNeeds.length - 1; i >= 0; i--) {
-        const day = dailyNeeds[i];
-        const x = padding + i * xStep;
-        const neededY = canvas.height - padding - (day.needed / maxWorkers) * graphHeight;
-
-        if (day.needed > availableWorkersCount) {
-            ctx.lineTo(x, neededY);
-        }
-    }
-
-    ctx.closePath();
-    ctx.fill();
-
-    // Draw Y-axis labels
-    ctx.fillStyle = '#666';
-    ctx.font = '11px Arial';
-    ctx.textAlign = 'right';
-
-    for (let i = 0; i <= 5; i++) {
-        const value = Math.round((maxWorkers / 5) * i);
-        const y = canvas.height - padding - (i / 5) * graphHeight;
-        ctx.fillText(value.toString(), padding - 5, y + 4);
-    }
-
-    // Draw X-axis labels (show every 7 days or so)
-    ctx.textAlign = 'center';
-    const labelInterval = Math.max(1, Math.floor(dailyNeeds.length / 10));
-
-    dailyNeeds.forEach((day, i) => {
-        if (i % labelInterval === 0) {
-            const x = padding + i * xStep;
-            const dateStr = formatDate(day.date.toISOString().split('T')[0]);
-            ctx.fillText(dateStr, x, canvas.height - padding + 20);
-        }
-    });
-}
-
-// ============================================================================
-// Worker/Job Management Functions
-// ============================================================================
-
-/**
- * Assign a foreman to a job
- */
-function assignForeman(jobId) {
-    const select = document.getElementById(`assign-foreman-${jobId}`);
-    const foremanId = parseInt(select.value);
-
-    if (!foremanId) return;
-
-    const job = jobs.find(j => j.id === jobId);
-    const foreman = workers.find(w => w.id === foremanId);
-
-    if (job && foreman && foreman.isForeman) {
-        // If foreman was previously assigned elsewhere, free them up
-        if (job.foreman) {
-            const oldForeman = workers.find(w => w.id === job.foreman);
-            if (oldForeman) oldForeman.status = 'available';
-        }
-
-        job.foreman = foremanId;
-        foreman.status = 'assigned';
-        saveData();
-        renderWorkers();
-        renderJobs();
-        renderGantt();
-        updateStats();
-    }
-}
-
-/**
- * Unassign foreman from a job
- */
-function unassignForeman(jobId) {
-    const job = jobs.find(j => j.id === jobId);
-
-    if (job && job.foreman) {
-        const foreman = workers.find(w => w.id === job.foreman);
-        if (foreman) foreman.status = 'available';
-
-        job.foreman = null;
-        saveData();
-        renderWorkers();
-        renderJobs();
-        renderGantt();
-        updateStats();
-    }
-}
-
-/**
- * Assign a worker to a job
- */
-function assignWorker(jobId) {
-    const select = document.getElementById(`assign-${jobId}`);
-    const workerId = parseInt(select.value);
-
-    if (!workerId) return;
-
-    const job = jobs.find(j => j.id === jobId);
-    const worker = workers.find(w => w.id === workerId);
-
-    if (job && worker && job.crew.length < job.crewSize) {
-        job.crew.push(workerId);
-        worker.status = 'assigned';
-        saveData();
-        renderWorkers();
-        renderJobs();
-        renderGantt();
-        renderManpowerGraph();
-        updateStats();
-    }
-}
-
-/**
- * Unassign a worker from a job
- */
-function unassignWorker(jobId, workerId) {
-    const job = jobs.find(j => j.id === jobId);
-    const worker = workers.find(w => w.id === workerId);
-
-    if (job && worker) {
-        job.crew = job.crew.filter(id => id !== workerId);
-        worker.status = 'available';
-        saveData();
-        renderWorkers();
-        renderJobs();
-        renderGantt();
-        renderManpowerGraph();
-        updateStats();
-    }
-}
-
-/**
- * Edit a worker
- */
-function editWorker(id) {
-    const worker = workers.find(w => w.id === id);
-    if (!worker) return;
-
-    // Populate form with worker data
-    document.getElementById('workerName').value = worker.name;
-    document.getElementById('workerRole').value = worker.role;
-    document.getElementById('workerDivision').value = worker.division;
-    document.getElementById('workerIsForeman').checked = worker.isForeman;
-
-    // Update submit button text
-    const submitBtn = document.querySelector('#workerForm button[type="submit"]');
-    submitBtn.textContent = 'Update Worker';
-
-    // Add cancel button if it doesn't exist
-    if (!document.getElementById('cancelEditWorker')) {
-        const cancelBtn = document.createElement('button');
-        cancelBtn.id = 'cancelEditWorker';
-        cancelBtn.type = 'button';
-        cancelBtn.className = 'btn-cancel';
-        cancelBtn.textContent = 'Cancel';
-        cancelBtn.onclick = cancelEditWorker;
-        submitBtn.parentNode.insertBefore(cancelBtn, submitBtn.nextSibling);
-    }
-
-    // Set editing mode
-    editingWorkerId = id;
-
-    // Scroll to form
-    document.querySelector('#workerForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-/**
- * Cancel editing a worker
- */
-function cancelEditWorker() {
-    editingWorkerId = null;
-    document.getElementById('workerForm').reset();
-    document.querySelector('#workerForm button[type="submit"]').textContent = 'Add Worker';
-
-    const cancelBtn = document.getElementById('cancelEditWorker');
-    if (cancelBtn) cancelBtn.remove();
+            <button class="btn-remove" onclick="removeJob(${job.id})">Remove</button>
+        </div>
+    `).join('');
 }
 
 /**
  * Remove a worker
  */
 function removeWorker(id) {
-    // Remove from any jobs first
-    jobs.forEach(job => {
-        job.crew = job.crew.filter(wId => wId !== id);
-        if (job.foreman === id) job.foreman = null;
+    // Remove from any schedule assignments
+    Object.keys(dailySchedule).forEach(key => {
+        if (dailySchedule[key].assigned) {
+            dailySchedule[key].assigned = dailySchedule[key].assigned.filter(wId => wId !== id);
+        }
     });
+
     workers = workers.filter(w => w.id !== id);
     saveData();
     renderWorkers();
-    renderJobs();
-    renderGantt();
-    renderManpowerGraph();
-    updateStats();
+    renderSchedule();
 }
 
 /**
  * Remove a job
  */
 function removeJob(id) {
-    const job = jobs.find(j => j.id === id);
-    // Free up assigned workers
-    if (job) {
-        if (job.crew) {
-            job.crew.forEach(workerId => {
-                const worker = workers.find(w => w.id === workerId);
-                if (worker) worker.status = 'available';
-            });
+    // Remove all schedule entries for this job
+    Object.keys(dailySchedule).forEach(key => {
+        if (key.startsWith(`${id}_`)) {
+            delete dailySchedule[key];
         }
-        if (job.foreman) {
-            const foreman = workers.find(w => w.id === job.foreman);
-            if (foreman) foreman.status = 'available';
-        }
-    }
+    });
+
     jobs = jobs.filter(j => j.id !== id);
     saveData();
-    renderWorkers();
     renderJobs();
-    renderGantt();
-    renderManpowerGraph();
-    updateStats();
+    renderSchedule();
 }
 
 // ============================================================================
-// Utility Functions
-// ============================================================================
-
-/**
- * Format date for display
- */
-function formatDate(dateStr) {
-    if (!dateStr) return '';
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-/**
- * Update dashboard statistics
- */
-function updateStats() {
-    document.getElementById('totalWorkers').textContent = workers.length;
-    document.getElementById('totalJobs').textContent = jobs.length;
-
-    const assigned = workers.filter(w => w.status === 'assigned').length;
-    document.getElementById('workersAssigned').textContent = assigned;
-
-    const utilization = workers.length > 0 ? Math.round((assigned / workers.length) * 100) : 0;
-    document.getElementById('utilizationRate').textContent = utilization + '%';
-
-    const totalForemen = workers.filter(w => w.isForeman).length;
-    document.getElementById('totalForemen').textContent = totalForemen;
-
-    const foremenAvailable = workers.filter(w => w.isForeman && w.status === 'available').length;
-    document.getElementById('foremenAvailable').textContent = foremenAvailable;
-}
-
-// ============================================================================
-// Data Persistence (Firebase / localStorage)
-// ============================================================================
-
-/**
- * Save data to Firebase or localStorage
- */
-function saveData() {
-    if (database) {
-        database.ref('workers').set(workers);
-        database.ref('jobs').set(jobs);
-        database.ref('weeklySchedule').set(weeklySchedule);
-    } else {
-        localStorage.setItem('workers', JSON.stringify(workers));
-        localStorage.setItem('jobs', JSON.stringify(jobs));
-        localStorage.setItem('weeklySchedule', JSON.stringify(weeklySchedule));
-    }
-}
-
-/**
- * Initialize data from Firebase or localStorage
- */
-function initializeData() {
-    if (database) {
-        database.ref('workers').on('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                workers = data;
-                renderWorkers();
-                renderManpowerGraph();
-                renderSchedule();
-                updateStats();
-            }
-        });
-
-        database.ref('jobs').on('value', (snapshot) => {
-            const data = snapshot.val();
-            if (data) {
-                jobs = data;
-                renderJobs();
-                renderManpowerGraph();
-                renderSchedule();
-                updateStats();
-            }
-        });
-
-        database.ref('weeklySchedule').on('value', (snapshot) => {
-            const data = snapshot.val();
-            weeklySchedule = data || {};
-            renderSchedule();
-        });
-    } else {
-        workers = JSON.parse(localStorage.getItem('workers')) || [];
-        jobs = JSON.parse(localStorage.getItem('jobs')) || [];
-        weeklySchedule = JSON.parse(localStorage.getItem('weeklySchedule')) || {};
-        renderWorkers();
-        renderJobs();
-        renderManpowerGraph();
-        renderSchedule();
-        updateStats();
-    }
-}
-
-// ============================================================================
-// 3-Week Schedule Functions
+// 3-Week Daily Schedule Functions
 // ============================================================================
 
 /**
@@ -856,38 +181,56 @@ function getWeekMonday(offsetWeeks) {
     return monday;
 }
 
-function getWeekKey(weekStart) {
-    return weekStart.toISOString().split('T')[0];
+/**
+ * Get date string key for storage (YYYY-MM-DD)
+ */
+function getDateKey(date) {
+    return date.toISOString().split('T')[0];
 }
 
-function formatWeekHeader(weekStart) {
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 4); // Friday
-    const opts = { month: 'short', day: 'numeric' };
-    return `${weekStart.toLocaleDateString('en-US', opts)} – ${weekEnd.toLocaleDateString('en-US', opts)}`;
+/**
+ * Format date for display
+ */
+function formatDateShort(date) {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+/**
+ * Shift schedule view by N weeks
+ */
 function shiftScheduleWeek(delta) {
     scheduleWeekOffset += delta;
     renderSchedule();
 }
 
+/**
+ * Main schedule rendering function
+ */
 function renderSchedule() {
-    const weeks = [0, 1, 2].map(i => getWeekMonday(scheduleWeekOffset + i));
-    const weekKeys = weeks.map(w => getWeekKey(w));
+    // Generate all dates for 3 weeks (Mon-Sat)
+    const dates = [];
+    for (let week = 0; week < 3; week++) {
+        const monday = getWeekMonday(scheduleWeekOffset + week);
+        for (let day = 0; day < 6; day++) { // Mon-Sat (0-5)
+            const date = new Date(monday);
+            date.setDate(monday.getDate() + day);
+            dates.push(date);
+        }
+    }
 
     // Update week range label
-    const rangeStart = weeks[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const rangeEnd = new Date(weeks[2]);
-    rangeEnd.setDate(rangeEnd.getDate() + 4);
-    const rangeEndStr = rangeEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const rangeStart = formatDateShort(dates[0]);
+    const rangeEnd = formatDateShort(dates[dates.length - 1]);
     const label = document.getElementById('scheduleWeekRange');
-    if (label) label.textContent = `${rangeStart} – ${rangeEndStr}`;
+    if (label) label.textContent = `${rangeStart} – ${rangeEnd}`;
 
     renderRosterPanel();
-    renderScheduleGrid(weeks, weekKeys);
+    renderScheduleGrid(dates);
 }
 
+/**
+ * Render the team roster panel (left side)
+ */
 function renderRosterPanel() {
     const filter = document.getElementById('rosterDivisionFilter');
     const filterVal = filter ? filter.value : 'all';
@@ -899,7 +242,7 @@ function renderRosterPanel() {
         : workers.filter(w => w.division === filterVal || w.division === 'both');
 
     if (filtered.length === 0) {
-        container.innerHTML = '<div class="roster-empty">No workers added yet</div>';
+        container.innerHTML = '<div class="roster-empty">No workers available</div>';
         return;
     }
 
@@ -914,91 +257,92 @@ function renderRosterPanel() {
     `).join('');
 }
 
-function renderScheduleGrid(weeks, weekKeys) {
+/**
+ * Render the schedule grid with daily columns
+ */
+function renderScheduleGrid(dates) {
     const container = document.getElementById('scheduleGrid');
     if (!container) return;
 
-    const windowStart = weeks[0];
-    const windowEnd = new Date(weeks[2]);
-    windowEnd.setDate(windowEnd.getDate() + 6);
+    const activeJobs = jobs.filter(j => j.active);
 
-    let activeJobs = jobs.filter(job => {
-        if (!job.startDate || !job.endDate) return false;
-        const s = new Date(job.startDate + 'T00:00:00');
-        const e = new Date(job.endDate + 'T00:00:00');
-        return s <= windowEnd && e >= windowStart;
-    });
-
-    if (currentDivision !== 'all') {
-        activeJobs = activeJobs.filter(j => j.division === currentDivision);
-    }
-
+    // Build table header with daily columns
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     let html = `<table class="schedule-table">
         <thead>
-            <tr>
-                <th class="col-job">Job Site</th>
-                ${weeks.map(w => `<th class="col-week">${formatWeekHeader(w)}</th>`).join('')}
-            </tr>
-        </thead>
-        <tbody>`;
+            <tr class="week-headers">
+                <th class="col-job">Job Site</th>`;
+
+    // Week headers (3 weeks)
+    for (let week = 0; week < 3; week++) {
+        const weekStart = getWeekMonday(scheduleWeekOffset + week);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 5); // Saturday
+        const weekLabel = `${formatDateShort(weekStart)} – ${formatDateShort(weekEnd)}`;
+        html += `<th class="col-week-header" colspan="6">${weekLabel}</th>`;
+    }
+
+    html += `</tr><tr class="day-headers">
+                <th class="col-job"></th>`;
+
+    // Day headers (18 columns = 3 weeks × 6 days)
+    for (let week = 0; week < 3; week++) {
+        dayNames.forEach(day => {
+            html += `<th class="col-day">${day}</th>`;
+        });
+    }
+
+    html += `</tr></thead><tbody>`;
 
     if (activeJobs.length === 0) {
-        html += `<tr><td colspan="4" class="schedule-empty-row">No active jobs in this 3-week window</td></tr>`;
+        html += `<tr><td colspan="19" class="schedule-empty-row">No active jobs. Click "+ Add Job" to get started.</td></tr>`;
     } else {
         activeJobs.forEach(job => {
-            html += `<tr><td class="col-job-name">
-                <div class="sched-job-name">${job.name}</div>
-                <div class="sched-job-div badge-${job.division}">${job.division}</div>
-            </td>`;
+            html += `<tr>
+                <td class="col-job-name">
+                    <div class="sched-job-name">${job.name}</div>
+                    <div class="sched-job-div badge-${job.division}">${job.division}</div>
+                </td>`;
 
-            weeks.forEach((week, i) => {
-                const weekKey = weekKeys[i];
-                const slotKey = `${job.id}_${weekKey}`;
-                const slot = weeklySchedule[slotKey] || { demand: 0, assigned: [] };
+            // Render each day cell
+            dates.forEach(date => {
+                const dateKey = getDateKey(date);
+                const slotKey = `${job.id}_${dateKey}`;
+                const slot = dailySchedule[slotKey] || { demand: 0, assigned: [] };
                 const demand = parseInt(slot.demand) || 0;
                 const assigned = (slot.assigned || []).filter(id => workers.find(w => w.id === id));
 
-                // Is job active this week?
-                const jobStart = new Date(job.startDate + 'T00:00:00');
-                const jobEnd = new Date(job.endDate + 'T00:00:00');
-                const weekEnd = new Date(week);
-                weekEnd.setDate(week.getDate() + 6);
-                const isActive = jobStart <= weekEnd && jobEnd >= week;
-
-                let statusClass = 'cell-inactive';
-                if (isActive) {
-                    if (demand === 0) statusClass = 'cell-no-demand';
-                    else if (assigned.length === 0) statusClass = 'cell-empty';
-                    else if (assigned.length < demand) statusClass = 'cell-short';
-                    else if (assigned.length === demand) statusClass = 'cell-full';
-                    else statusClass = 'cell-over';
-                }
+                // Determine cell status color
+                let statusClass = 'cell-active';
+                if (demand === 0) statusClass = 'cell-no-demand';
+                else if (assigned.length === 0) statusClass = 'cell-empty';
+                else if (assigned.length < demand) statusClass = 'cell-short';
+                else if (assigned.length === demand) statusClass = 'cell-full';
+                else statusClass = 'cell-over';
 
                 const assignedWorkers = assigned.map(id => workers.find(w => w.id === id)).filter(Boolean);
 
                 html += `<td class="schedule-cell ${statusClass}"
                              ondragover="event.preventDefault(); this.classList.add('drag-over')"
                              ondragleave="this.classList.remove('drag-over')"
-                             ondrop="dropWorkerToCell(event, ${job.id}, '${weekKey}')">
+                             ondrop="dropWorkerToCell(event, ${job.id}, '${dateKey}')">
                     <div class="cell-demand-row">
-                        <label class="demand-label">Need</label>
-                        <input type="number" class="demand-input" value="${demand}" min="0" max="99"
-                               ${!isActive ? 'disabled' : ''}
-                               onchange="setDemand(${job.id}, '${weekKey}', this.value)"
-                               onclick="event.stopPropagation()">
-                        <span class="assigned-count">${assigned.length} assigned</span>
+                        <input type="number" class="demand-input" value="${demand}" min="0" max="9"
+                               onchange="setDemand(${job.id}, '${dateKey}', this.value)"
+                               onclick="event.stopPropagation()"
+                               title="PM: Set daily manpower need">
+                        <span class="assigned-count">${assigned.length}</span>
                     </div>
                     <div class="cell-workers">
                         ${assignedWorkers.map(w => `
-                            <div class="worker-chip worker-chip-${w.role} chip-small"
+                            <div class="worker-chip-mini worker-chip-${w.role}"
                                  draggable="true"
-                                 ondragstart="dragWorkerStart(event, ${w.id}, ${job.id}, '${weekKey}')"
+                                 ondragstart="dragWorkerStart(event, ${w.id}, ${job.id}, '${dateKey}')"
                                  title="${w.name}">
-                                <span class="chip-name">${w.name.split(' ')[0]}</span>
-                                <button class="chip-remove" onclick="removeScheduleWorker(${job.id}, '${weekKey}', ${w.id}); event.stopPropagation()">×</button>
+                                <span class="chip-name-mini">${w.name.split(' ')[0]}</span>
+                                <button class="chip-remove" onclick="removeScheduleWorker(${job.id}, '${dateKey}', ${w.id}); event.stopPropagation()">×</button>
                             </div>
                         `).join('')}
-                        ${isActive && assigned.length === 0 && demand > 0 ? '<div class="drop-hint">Drop workers here</div>' : ''}
                     </div>
                 </td>`;
             });
@@ -1011,44 +355,46 @@ function renderScheduleGrid(weeks, weekKeys) {
     container.innerHTML = html;
 }
 
-// ---- Drag & Drop ----
+// ============================================================================
+// Drag & Drop Handlers
+// ============================================================================
 
-function dragWorkerStart(event, workerId, fromJob, fromWeek) {
+function dragWorkerStart(event, workerId, fromJob, fromDate) {
     draggingWorkerId = workerId;
     draggingFromJob = fromJob;
-    draggingFromWeek = fromWeek;
+    draggingFromDate = fromDate;
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', String(workerId));
 }
 
-function dropWorkerToCell(event, jobId, weekKey) {
+function dropWorkerToCell(event, jobId, dateKey) {
     event.preventDefault();
     event.target.closest('.schedule-cell')?.classList.remove('drag-over');
 
     if (!draggingWorkerId) return;
 
-    const slotKey = `${jobId}_${weekKey}`;
-    if (!weeklySchedule[slotKey]) weeklySchedule[slotKey] = { demand: 0, assigned: [] };
-    if (!Array.isArray(weeklySchedule[slotKey].assigned)) weeklySchedule[slotKey].assigned = [];
+    const slotKey = `${jobId}_${dateKey}`;
+    if (!dailySchedule[slotKey]) dailySchedule[slotKey] = { demand: 0, assigned: [] };
+    if (!Array.isArray(dailySchedule[slotKey].assigned)) dailySchedule[slotKey].assigned = [];
 
     // Don't add duplicate
-    if (weeklySchedule[slotKey].assigned.includes(draggingWorkerId)) {
-        draggingWorkerId = draggingFromJob = draggingFromWeek = null;
+    if (dailySchedule[slotKey].assigned.includes(draggingWorkerId)) {
+        draggingWorkerId = draggingFromJob = draggingFromDate = null;
         return;
     }
 
     // Remove from source cell if dragging between cells
-    if (draggingFromJob !== null && draggingFromWeek !== null) {
-        const fromKey = `${draggingFromJob}_${draggingFromWeek}`;
-        if (weeklySchedule[fromKey]) {
-            weeklySchedule[fromKey].assigned = weeklySchedule[fromKey].assigned.filter(id => id !== draggingWorkerId);
+    if (draggingFromJob !== null && draggingFromDate !== null) {
+        const fromKey = `${draggingFromJob}_${draggingFromDate}`;
+        if (dailySchedule[fromKey]) {
+            dailySchedule[fromKey].assigned = dailySchedule[fromKey].assigned.filter(id => id !== draggingWorkerId);
         }
     }
 
-    weeklySchedule[slotKey].assigned.push(draggingWorkerId);
+    dailySchedule[slotKey].assigned.push(draggingWorkerId);
     saveData();
     renderSchedule();
-    draggingWorkerId = draggingFromJob = draggingFromWeek = null;
+    draggingWorkerId = draggingFromJob = draggingFromDate = null;
 }
 
 function dropWorkerToRoster(event) {
@@ -1056,349 +402,95 @@ function dropWorkerToRoster(event) {
     document.getElementById('scheduleRoster')?.classList.remove('roster-drag-over');
 
     // Remove from source cell
-    if (draggingFromJob !== null && draggingFromWeek !== null) {
-        const fromKey = `${draggingFromJob}_${draggingFromWeek}`;
-        if (weeklySchedule[fromKey]) {
-            weeklySchedule[fromKey].assigned = weeklySchedule[fromKey].assigned.filter(id => id !== draggingWorkerId);
+    if (draggingFromJob !== null && draggingFromDate !== null) {
+        const fromKey = `${draggingFromJob}_${draggingFromDate}`;
+        if (dailySchedule[fromKey]) {
+            dailySchedule[fromKey].assigned = dailySchedule[fromKey].assigned.filter(id => id !== draggingWorkerId);
             saveData();
             renderSchedule();
         }
     }
-    draggingWorkerId = draggingFromJob = draggingFromWeek = null;
+    draggingWorkerId = draggingFromJob = draggingFromDate = null;
 }
 
-function setDemand(jobId, weekKey, value) {
-    const slotKey = `${jobId}_${weekKey}`;
-    if (!weeklySchedule[slotKey]) weeklySchedule[slotKey] = { demand: 0, assigned: [] };
-    weeklySchedule[slotKey].demand = parseInt(value) || 0;
+function setDemand(jobId, dateKey, value) {
+    const slotKey = `${jobId}_${dateKey}`;
+    if (!dailySchedule[slotKey]) dailySchedule[slotKey] = { demand: 0, assigned: [] };
+    dailySchedule[slotKey].demand = parseInt(value) || 0;
     saveData();
     renderSchedule();
 }
 
-function removeScheduleWorker(jobId, weekKey, workerId) {
-    const slotKey = `${jobId}_${weekKey}`;
-    if (weeklySchedule[slotKey]) {
-        weeklySchedule[slotKey].assigned = weeklySchedule[slotKey].assigned.filter(id => id !== workerId);
+function removeScheduleWorker(jobId, dateKey, workerId) {
+    const slotKey = `${jobId}_${dateKey}`;
+    if (dailySchedule[slotKey]) {
+        dailySchedule[slotKey].assigned = dailySchedule[slotKey].assigned.filter(id => id !== workerId);
         saveData();
         renderSchedule();
     }
 }
 
 // ============================================================================
-// CSV Import/Export Functions
+// Data Persistence (Firebase / localStorage)
 // ============================================================================
 
 /**
- * Import workers from CSV file
+ * Save data to Firebase or localStorage
  */
-function importWorkersCSV(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const text = e.target.result;
-        const lines = text.split('\n');
-
-        let importedCount = 0;
-        let errorCount = 0;
-        const errors = [];
-
-        console.log('=== CSV IMPORT: WORKERS ===');
-        console.log(`Total lines in file: ${lines.length}`);
-        console.log('Expected format: name,role,division,isForeman');
-        console.log('Valid roles: foreman, journeyman, apprentice');
-        console.log('Valid divisions: commercial, residential, both');
-        console.log('Valid isForeman: true, false');
-        console.log('---');
-
-        // Skip header row and process data
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) {
-                console.log(`Row ${i + 1}: Skipped (empty line)`);
-                continue;
-            }
-
-            const rowNum = i + 1;
-            const parts = line.split(',').map(s => s.trim());
-            const [name, role, division, isForeman] = parts;
-
-            console.log(`Row ${rowNum}: Processing "${line}"`);
-            console.log(`  Parsed as: name="${name}", role="${role}", division="${division}", isForeman="${isForeman}"`);
-
-            // Validate data
-            if (!name || !role || !division) {
-                const missing = [];
-                if (!name) missing.push('name');
-                if (!role) missing.push('role');
-                if (!division) missing.push('division');
-                const error = `Row ${rowNum}: Missing required fields: ${missing.join(', ')}`;
-                console.error(`❌ ${error}`);
-                errors.push(error);
-                errorCount++;
-                continue;
-            }
-
-            if (!['foreman', 'journeyman', 'apprentice'].includes(role)) {
-                const error = `Row ${rowNum}: Invalid role "${role}" for ${name}. Must be: foreman, journeyman, or apprentice`;
-                console.error(`❌ ${error}`);
-                errors.push(error);
-                errorCount++;
-                continue;
-            }
-
-            if (!['commercial', 'residential', 'both'].includes(division)) {
-                const error = `Row ${rowNum}: Invalid division "${division}" for ${name}. Must be: commercial, residential, or both`;
-                console.error(`❌ ${error}`);
-                errors.push(error);
-                errorCount++;
-                continue;
-            }
-
-            // Create worker
-            const worker = {
-                id: Date.now() + i,
-                name: name,
-                role: role,
-                division: division,
-                isForeman: isForeman === 'true',
-                status: 'available'
-            };
-
-            workers.push(worker);
-            importedCount++;
-            console.log(`✅ Row ${rowNum}: Successfully imported ${name}`);
-        }
-
-        saveData();
-        renderWorkers();
-        renderManpowerGraph();
-        updateStats();
-
-        console.log('---');
-        console.log(`SUMMARY: ✅ ${importedCount} imported, ❌ ${errorCount} errors`);
-        if (errors.length > 0) {
-            console.log('\nDETAILED ERRORS:');
-            errors.forEach(err => console.log(`  ${err}`));
-        }
-
-        let message = `Import complete!\n✅ Imported: ${importedCount} workers`;
-        if (errorCount > 0) {
-            message += `\n❌ Errors: ${errorCount}\n\nCheck browser console (F12) for detailed error log.`;
-            message += `\n\nFirst error: ${errors[0]}`;
-        }
-        alert(message);
-
-        // Reset file input
-        event.target.value = '';
-    };
-
-    reader.readAsText(file);
-}
-
-/**
- * Import jobs from CSV file
- */
-function importJobsCSV(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const text = e.target.result;
-        const lines = text.split('\n');
-
-        let importedCount = 0;
-        let errorCount = 0;
-        const errors = [];
-
-        console.log('=== CSV IMPORT: JOBS ===');
-        console.log(`Total lines in file: ${lines.length}`);
-        console.log('Expected format: name,division,location,startDate,endDate,hours,crewSize');
-        console.log('Valid divisions: commercial, residential');
-        console.log('Date format: YYYY-MM-DD (e.g., 2024-02-15)');
-        console.log('---');
-
-        // Skip header row and process data
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) {
-                console.log(`Row ${i + 1}: Skipped (empty line)`);
-                continue;
-            }
-
-            const rowNum = i + 1;
-            const parts = line.split(',').map(s => s.trim());
-            const [name, division, location, startDate, endDate, hours, crewSize] = parts;
-
-            console.log(`Row ${rowNum}: Processing "${line}"`);
-            console.log(`  Parsed as: name="${name}", division="${division}", location="${location}"`);
-            console.log(`  Dates: start="${startDate}", end="${endDate}"`);
-            console.log(`  Details: hours="${hours}", crewSize="${crewSize}"`);
-
-            // Validate data
-            if (!name || !division || !location || !startDate || !endDate || !hours || !crewSize) {
-                const missing = [];
-                if (!name) missing.push('name');
-                if (!division) missing.push('division');
-                if (!location) missing.push('location');
-                if (!startDate) missing.push('startDate');
-                if (!endDate) missing.push('endDate');
-                if (!hours) missing.push('hours');
-                if (!crewSize) missing.push('crewSize');
-                const error = `Row ${rowNum}: Missing required fields: ${missing.join(', ')}`;
-                console.error(`❌ ${error}`);
-                errors.push(error);
-                errorCount++;
-                continue;
-            }
-
-            if (!['commercial', 'residential'].includes(division)) {
-                const error = `Row ${rowNum}: Invalid division "${division}" for ${name}. Must be: commercial or residential`;
-                console.error(`❌ ${error}`);
-                errors.push(error);
-                errorCount++;
-                continue;
-            }
-
-            // Validate dates
-            if (isNaN(Date.parse(startDate))) {
-                const error = `Row ${rowNum}: Invalid start date "${startDate}" for ${name}. Use format: YYYY-MM-DD`;
-                console.error(`❌ ${error}`);
-                errors.push(error);
-                errorCount++;
-                continue;
-            }
-
-            if (isNaN(Date.parse(endDate))) {
-                const error = `Row ${rowNum}: Invalid end date "${endDate}" for ${name}. Use format: YYYY-MM-DD`;
-                console.error(`❌ ${error}`);
-                errors.push(error);
-                errorCount++;
-                continue;
-            }
-
-            // Validate numeric fields
-            if (isNaN(parseInt(hours))) {
-                const error = `Row ${rowNum}: Invalid hours "${hours}" for ${name}. Must be a number`;
-                console.error(`❌ ${error}`);
-                errors.push(error);
-                errorCount++;
-                continue;
-            }
-
-            if (isNaN(parseInt(crewSize))) {
-                const error = `Row ${rowNum}: Invalid crew size "${crewSize}" for ${name}. Must be a number`;
-                console.error(`❌ ${error}`);
-                errors.push(error);
-                errorCount++;
-                continue;
-            }
-
-            // Create job
-            const job = {
-                id: Date.now() + i,
-                name: name,
-                division: division,
-                location: location,
-                startDate: startDate,
-                endDate: endDate,
-                hours: hours,
-                crewSize: crewSize,
-                crew: [],
-                foreman: null
-            };
-
-            jobs.push(job);
-            importedCount++;
-            console.log(`✅ Row ${rowNum}: Successfully imported ${name}`);
-        }
-
-        saveData();
-        renderJobs();
-        renderGantt();
-        renderManpowerGraph();
-        updateStats();
-
-        console.log('---');
-        console.log(`SUMMARY: ✅ ${importedCount} imported, ❌ ${errorCount} errors`);
-        if (errors.length > 0) {
-            console.log('\nDETAILED ERRORS:');
-            errors.forEach(err => console.log(`  ${err}`));
-        }
-
-        let message = `Import complete!\n✅ Imported: ${importedCount} jobs`;
-        if (errorCount > 0) {
-            message += `\n❌ Errors: ${errorCount}\n\nCheck browser console (F12) for detailed error log.`;
-            message += `\n\nFirst error: ${errors[0]}`;
-        }
-        alert(message);
-
-        // Reset file input
-        event.target.value = '';
-    };
-
-    reader.readAsText(file);
-}
-
-/**
- * Download worker CSV template
- */
-function downloadWorkerTemplate() {
-    const csv = `name,role,division,isForeman
-John Smith,journeyman,commercial,false
-Jane Doe,apprentice,residential,false
-Mike Jones,foreman,both,true
-Sarah Williams,journeyman,commercial,false
-Tom Brown,foreman,residential,true`;
-
-    downloadCSV(csv, 'worker_template.csv');
-}
-
-/**
- * Download job CSV template
- */
-function downloadJobTemplate() {
-    const csv = `name,division,location,startDate,endDate,hours,crewSize
-Downtown Office Building,commercial,123 Main St,2024-02-01,2024-03-15,160,4
-Smith Residence,residential,456 Oak Ave,2024-02-10,2024-02-28,80,2
-Warehouse Expansion,commercial,789 Industrial Pkwy,2024-03-01,2024-04-30,320,6
-Jones House Rewire,residential,321 Elm St,2024-02-15,2024-03-01,60,2`;
-
-    downloadCSV(csv, 'job_template.csv');
-}
-
-/**
- * Helper function to download CSV
- */
-function downloadCSV(content, filename) {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
-    link.style.visibility = 'hidden';
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
-
-// ============================================================================
-// Initialize Application
-// ============================================================================
-
-// Initialize Firebase (from firebase-config.js)
-initializeFirebase();
-
-// Load data and start the app
-initializeData();
-
-// Close modal when clicking outside
-document.getElementById('settingsModal').addEventListener('click', function(e) {
-    if (e.target === this) {
-        toggleSettings();
+function saveData() {
+    if (database) {
+        database.ref('workers').set(workers);
+        database.ref('jobs').set(jobs);
+        database.ref('dailySchedule').set(dailySchedule);
+    } else {
+        localStorage.setItem('workers', JSON.stringify(workers));
+        localStorage.setItem('jobs', JSON.stringify(jobs));
+        localStorage.setItem('dailySchedule', JSON.stringify(dailySchedule));
     }
+}
+
+/**
+ * Initialize data from Firebase or localStorage
+ */
+function initializeData() {
+    if (database) {
+        database.ref('workers').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                workers = data;
+                renderWorkers();
+                renderSchedule();
+            }
+        });
+
+        database.ref('jobs').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                jobs = data;
+                renderJobs();
+                renderSchedule();
+            }
+        });
+
+        database.ref('dailySchedule').on('value', (snapshot) => {
+            const data = snapshot.val();
+            dailySchedule = data || {};
+            renderSchedule();
+        });
+    } else {
+        workers = JSON.parse(localStorage.getItem('workers')) || [];
+        jobs = JSON.parse(localStorage.getItem('jobs')) || [];
+        dailySchedule = JSON.parse(localStorage.getItem('dailySchedule')) || {};
+        renderWorkers();
+        renderJobs();
+        renderSchedule();
+    }
+}
+
+// ============================================================================
+// Initialize on page load
+// ============================================================================
+
+document.addEventListener('DOMContentLoaded', function() {
+    initializeData();
 });
