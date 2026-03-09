@@ -18,6 +18,9 @@ let draggingFromDate = null;
 // Drag state for job reordering
 let draggingJobId = null;
 
+// UI state
+let showArchivedJobs = false;
+
 // ============================================================================
 // Modal Functions
 // ============================================================================
@@ -39,6 +42,95 @@ function closeAddJobModal() {
     document.getElementById('addJobModal').classList.remove('active');
     document.getElementById('jobForm').reset();
 }
+
+/**
+ * Custom confirm modal
+ */
+function showConfirmModal(title, message, onConfirm) {
+    const modal = document.getElementById('confirmModal');
+    if (!modal) return;
+
+    document.getElementById('confirmModalTitle').textContent = title;
+    document.getElementById('confirmModalMessage').textContent = message;
+
+    const confirmBtn = document.getElementById('confirmModalConfirm');
+    const cancelBtn = document.getElementById('confirmModalCancel');
+
+    // Remove old listeners
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    const newCancelBtn = cancelBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+
+    // Add new listeners
+    newConfirmBtn.addEventListener('click', () => {
+        onConfirm();
+        closeConfirmModal();
+    });
+
+    newCancelBtn.addEventListener('click', closeConfirmModal);
+
+    modal.classList.add('active');
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirmModal')?.classList.remove('active');
+}
+
+/**
+ * Custom prompt modal
+ */
+function showPromptModal(title, message, defaultValue, onConfirm) {
+    const modal = document.getElementById('promptModal');
+    if (!modal) return;
+
+    document.getElementById('promptModalTitle').textContent = title;
+    document.getElementById('promptModalMessage').textContent = message;
+    document.getElementById('promptModalInput').value = defaultValue || '';
+
+    const confirmBtn = document.getElementById('promptModalConfirm');
+    const cancelBtn = document.getElementById('promptModalCancel');
+
+    // Remove old listeners
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    const newCancelBtn = cancelBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+
+    // Add new listeners
+    newConfirmBtn.addEventListener('click', () => {
+        const value = document.getElementById('promptModalInput').value;
+        if (value && value.trim()) {
+            onConfirm(value.trim());
+            closePromptModal();
+        }
+    });
+
+    newCancelBtn.addEventListener('click', closePromptModal);
+
+    modal.classList.add('active');
+
+    // Focus the input
+    setTimeout(() => {
+        document.getElementById('promptModalInput').focus();
+    }, 100);
+}
+
+function closePromptModal() {
+    document.getElementById('promptModal')?.classList.remove('active');
+}
+
+/**
+ * Close any modal with ESC key
+ */
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeAddWorkerModal();
+        closeAddJobModal();
+        closeConfirmModal();
+        closePromptModal();
+    }
+});
 
 // ============================================================================
 // Form Event Handlers
@@ -158,21 +250,23 @@ function removeJob(id) {
     const job = jobs.find(j => j.id === id);
     if (!job) return;
 
-    if (!confirm(`Are you sure you want to remove "${job.name}"? This will delete all schedule assignments for this job.`)) {
-        return;
-    }
+    showConfirmModal(
+        'Remove Job',
+        `Are you sure you want to permanently remove "${job.name}"? This will delete all schedule assignments for this job.`,
+        () => {
+            // Remove all schedule entries for this job
+            Object.keys(dailySchedule).forEach(key => {
+                if (key.startsWith(`${id}_`)) {
+                    delete dailySchedule[key];
+                }
+            });
 
-    // Remove all schedule entries for this job
-    Object.keys(dailySchedule).forEach(key => {
-        if (key.startsWith(`${id}_`)) {
-            delete dailySchedule[key];
+            jobs = jobs.filter(j => j.id !== id);
+            saveData();
+            renderJobs();
+            renderSchedule();
         }
-    });
-
-    jobs = jobs.filter(j => j.id !== id);
-    saveData();
-    renderJobs();
-    renderSchedule();
+    );
 }
 
 /**
@@ -182,24 +276,55 @@ function archiveJob(id) {
     const job = jobs.find(j => j.id === id);
     if (!job) return;
 
-    job.active = false;
+    showConfirmModal(
+        'Archive Job',
+        `Archive "${job.name}"? This will remove it from the active schedule but keep all data.`,
+        () => {
+            job.active = false;
+            saveData();
+            renderSchedule();
+        }
+    );
+}
+
+/**
+ * Unarchive a job (marks as active)
+ */
+function unarchiveJob(id) {
+    const job = jobs.find(j => j.id === id);
+    if (!job) return;
+
+    job.active = true;
     saveData();
     renderSchedule();
 }
 
 /**
- * Edit a job (placeholder for future implementation)
+ * Toggle archived jobs visibility
+ */
+function toggleArchivedJobs() {
+    showArchivedJobs = !showArchivedJobs;
+    renderSchedule();
+}
+
+/**
+ * Edit a job
  */
 function editJob(id) {
     const job = jobs.find(j => j.id === id);
     if (!job) return;
 
-    const newName = prompt('Edit job name:', job.name);
-    if (newName && newName.trim()) {
-        job.name = newName.trim();
-        saveData();
-        renderSchedule();
-    }
+    showPromptModal(
+        'Edit Job Name',
+        'Enter new name for the job:',
+        job.name,
+        (newName) => {
+            job.name = newName;
+            saveData();
+            renderJobs();
+            renderSchedule();
+        }
+    );
 }
 
 // ============================================================================
@@ -511,6 +636,33 @@ function renderScheduleGrid(dates) {
     }
 
     html += `</tbody></table>`;
+
+    // Add archived jobs section
+    const archivedJobs = jobs.filter(j => !j.active);
+    if (archivedJobs.length > 0) {
+        html += `
+            <div class="archived-section">
+                <button class="archived-toggle-btn" onclick="toggleArchivedJobs()">
+                    ${showArchivedJobs ? '▼' : '▶'} Archived Jobs (${archivedJobs.length})
+                </button>
+                ${showArchivedJobs ? `
+                    <div class="archived-jobs-list">
+                        ${archivedJobs.map(job => `
+                            <div class="archived-job-card">
+                                <div class="archived-job-info">
+                                    <strong>${job.name}</strong>
+                                    <span class="badge badge-${job.division}">${job.division}</span>
+                                    ${job.location ? `<div class="archived-job-location">${job.location}</div>` : ''}
+                                </div>
+                                <button class="btn-unarchive" onclick="unarchiveJob(${job.id})">Unarchive</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
     container.innerHTML = html;
 }
 
@@ -530,10 +682,34 @@ function dragJobOver(event, targetJobId) {
     event.preventDefault();
     if (draggingJobId === null || draggingJobId === targetJobId) return;
     event.dataTransfer.dropEffect = 'move';
+
+    // Remove all existing drop indicators
+    document.querySelectorAll('.job-row').forEach(row => {
+        row.classList.remove('drop-above', 'drop-below');
+    });
+
+    // Add visual indicator
+    const dragIndex = jobs.findIndex(j => j.id === draggingJobId);
+    const targetIndex = jobs.findIndex(j => j.id === targetJobId);
+    const targetRow = event.target.closest('tr');
+
+    if (targetRow && dragIndex !== -1 && targetIndex !== -1) {
+        if (dragIndex < targetIndex) {
+            targetRow.classList.add('drop-below');
+        } else {
+            targetRow.classList.add('drop-above');
+        }
+    }
 }
 
 function dropJob(event, targetJobId) {
     event.preventDefault();
+
+    // Remove drop indicators
+    document.querySelectorAll('.job-row').forEach(row => {
+        row.classList.remove('drop-above', 'drop-below');
+    });
+
     if (draggingJobId === null || draggingJobId === targetJobId) return;
 
     // Find current positions
@@ -553,6 +729,9 @@ function dropJob(event, targetJobId) {
 
 function dragJobEnd(event) {
     event.target.closest('tr')?.classList.remove('dragging');
+    document.querySelectorAll('.job-row').forEach(row => {
+        row.classList.remove('drop-above', 'drop-below');
+    });
     draggingJobId = null;
 }
 
