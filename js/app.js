@@ -525,9 +525,13 @@ function renderRosterPanel() {
  */
 function renderScheduleGrid(dates) {
     const container = document.getElementById('scheduleGrid');
-    if (!container) return;
+    if (!container) {
+        console.error('scheduleGrid container not found!');
+        return;
+    }
 
     const activeJobs = jobs.filter(j => j.active);
+    console.log(`Rendering schedule with ${activeJobs.length} active jobs and ${workers.length} workers`);
 
     // Build table header with daily columns
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -775,6 +779,7 @@ function renderScheduleGrid(dates) {
     }
 
     container.innerHTML = html;
+    console.log(`Schedule rendered. HTML length: ${html.length} characters`);
 }
 
 // ============================================================================
