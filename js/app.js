@@ -470,7 +470,7 @@ function renderRosterPanel() {
     workers.forEach(w => {
         let scheduledDays = 0;
         dates.forEach(date => {
-            const dateKey = formatDate(date);
+            const dateKey = getDateKey(date);
             // Check if worker is scheduled on any job this day
             const isScheduled = Object.keys(dailySchedule).some(key => {
                 if (key.includes(dateKey)) {
