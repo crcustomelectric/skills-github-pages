@@ -474,7 +474,8 @@ function renderRosterPanel() {
             // Check if worker is scheduled on any job this day
             const isScheduled = Object.keys(dailySchedule).some(key => {
                 if (key.includes(dateKey)) {
-                    return dailySchedule[key].assigned.includes(w.id);
+                    const slot = dailySchedule[key];
+                    return slot && slot.assigned && slot.assigned.includes(w.id);
                 }
                 return false;
             });
