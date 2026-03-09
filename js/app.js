@@ -612,6 +612,12 @@ function renderScheduleGrid(dates) {
                          ondragend="dragJobEnd(event)">
                 <td class="col-job-name job-name-cell">
                     <div class="job-info-wrapper">
+                        <div class="job-drag-handle"
+                             draggable="true"
+                             ondragstart="dragJobStart(event, ${job.id})"
+                             title="Drag to reorder">
+                            ⋮⋮
+                        </div>
                         <div class="job-info">
                             <div class="sched-job-name">${job.name}</div>
                             <div class="sched-job-div badge-${job.division}">${job.division}</div>

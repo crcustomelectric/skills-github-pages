@@ -537,6 +537,35 @@ header p {
     gap: 10px;
 }
 
+.job-drag-handle {
+    width: 32px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: #999;
+    cursor: grab;
+    background: linear-gradient(to right, transparent, rgba(0,0,0,0.05));
+    border-right: 2px solid var(--border-gray);
+    margin-right: 8px;
+    padding: 0 4px;
+    transition: all 0.2s ease;
+    user-select: none;
+    letter-spacing: -2px;
+}
+
+.job-drag-handle:hover {
+    color: var(--primary-blue);
+    background: linear-gradient(to right, transparent, rgba(0, 86, 160, 0.1));
+    border-right-color: var(--primary-blue);
+}
+
+.job-drag-handle:active {
+    cursor: grabbing;
+    background: linear-gradient(to right, transparent, rgba(0, 86, 160, 0.2));
+}
+
 .job-info {
     flex: 1;
 }
