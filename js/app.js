@@ -121,6 +121,28 @@ function closePromptModal() {
 }
 
 /**
+ * Edit job modal
+ */
+let editingJobId = null;
+
+function showEditJobModal(jobId) {
+    const job = jobs.find(j => j.id === jobId);
+    if (!job) return;
+
+    editingJobId = jobId;
+    document.getElementById('editJobName').value = job.name;
+    document.getElementById('editJobDivision').value = job.division;
+    document.getElementById('editJobLocation').value = job.location || '';
+    document.getElementById('editJobModal').classList.add('active');
+}
+
+function closeEditJobModal() {
+    editingJobId = null;
+    document.getElementById('editJobModal').classList.remove('active');
+    document.getElementById('editJobForm').reset();
+}
+
+/**
  * Close any modal with ESC key
  */
 document.addEventListener('keydown', function(e) {
@@ -129,6 +151,7 @@ document.addEventListener('keydown', function(e) {
         closeAddJobModal();
         closeConfirmModal();
         closePromptModal();
+        closeEditJobModal();
     }
 });
 
@@ -172,6 +195,25 @@ document.getElementById('jobForm').addEventListener('submit', function(e) {
     renderJobs();
     renderSchedule();
     closeAddJobModal();
+});
+
+// Edit job form submission
+document.getElementById('editJobForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    if (!editingJobId) return;
+
+    const job = jobs.find(j => j.id === editingJobId);
+    if (!job) return;
+
+    job.name = document.getElementById('editJobName').value;
+    job.division = document.getElementById('editJobDivision').value;
+    job.location = document.getElementById('editJobLocation').value;
+
+    saveData();
+    renderJobs();
+    renderSchedule();
+    closeEditJobModal();
 });
 
 // ============================================================================
@@ -311,20 +353,7 @@ function toggleArchivedJobs() {
  * Edit a job
  */
 function editJob(id) {
-    const job = jobs.find(j => j.id === id);
-    if (!job) return;
-
-    showPromptModal(
-        'Edit Job Name',
-        'Enter new name for the job:',
-        job.name,
-        (newName) => {
-            job.name = newName;
-            saveData();
-            renderJobs();
-            renderSchedule();
-        }
-    );
+    showEditJobModal(id);
 }
 
 // ============================================================================
@@ -501,14 +530,12 @@ function renderScheduleGrid(dates) {
 
     html += `</tr>`;
 
-    // Add worker availability tally row with needed/assigned/available
+    // Add worker availability tally row with progress bars
     html += `<tr class="tally-row">
         <td class="col-job-name">
-            <strong>Daily Totals</strong>
+            <strong>Daily Staffing</strong>
             <div class="tally-legend">
-                <span class="legend-item"><span class="legend-dot needed"></span>Need</span>
-                <span class="legend-item"><span class="legend-dot assigned"></span>Assigned</span>
-                <span class="legend-item"><span class="legend-dot available"></span>Avail</span>
+                <span class="legend-item">Hover to see counts</span>
             </div>
         </td>`;
 
@@ -543,6 +570,9 @@ function renderScheduleGrid(dates) {
         const totalWorkers = workers.length;
         const availableCount = totalWorkers - vacationCount;
 
+        // Calculate progress bar width (assigned / needed * 100%)
+        const progressPercent = totalNeeded > 0 ? Math.min((assignedCount / totalNeeded) * 100, 100) : 0;
+
         // Determine cell status color
         let tallyClass = 'tally-neutral';
         if (totalNeeded > 0) {
@@ -551,13 +581,14 @@ function renderScheduleGrid(dates) {
             else tallyClass = 'tally-over';
         }
 
-        html += `<td class="tally-cell ${tallyClass}">
-            <div class="tally-display">
-                <span class="tally-needed" title="Workers needed">${totalNeeded}</span>
-                <span class="tally-separator">/</span>
-                <span class="tally-assigned" title="Workers assigned">${assignedCount}</span>
-                <span class="tally-separator">/</span>
-                <span class="tally-available" title="Workers available">${availableCount}</span>
+        html += `<td class="tally-cell ${tallyClass}" title="Need ${totalNeeded} | Assigned ${assignedCount} | Available ${availableCount}">
+            <div class="progress-bar-wrapper">
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill" style="width: ${progressPercent}%"></div>
+                </div>
+                <div class="progress-bar-tooltip">
+                    Need ${totalNeeded} | Assigned ${assignedCount}<br>Available ${availableCount}
+                </div>
             </div>
         </td>`;
     });
