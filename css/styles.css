@@ -835,3 +835,345 @@ button:active {
         width: 150px;
     }
 }
+
+/* ============================================================================
+   3-Week Schedule Styles
+   ============================================================================ */
+
+.section-subtitle {
+    color: #6c757d;
+    font-size: 0.9em;
+    margin: -10px 0 15px 0;
+}
+
+.schedule-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.schedule-nav {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.schedule-nav-btn {
+    background: var(--primary-blue);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 1em;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.schedule-nav-btn:hover {
+    background: var(--dark-blue);
+}
+
+.schedule-week-range {
+    font-weight: 600;
+    color: var(--text-dark);
+    font-size: 1em;
+}
+
+.schedule-body {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+}
+
+/* Roster Panel */
+.schedule-roster {
+    width: 180px;
+    flex-shrink: 0;
+    background: var(--light-gray);
+    border: 2px solid var(--border-gray);
+    border-radius: 8px;
+    padding: 12px;
+    min-height: 300px;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.schedule-roster.roster-drag-over {
+    border-color: var(--primary-blue);
+    background: #e8f0fc;
+}
+
+.roster-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.roster-header h3 {
+    font-size: 0.95em;
+    color: var(--text-dark);
+    margin: 0;
+}
+
+.roster-header select {
+    font-size: 0.8em;
+    padding: 3px 6px;
+    border: 1px solid var(--border-gray);
+    border-radius: 4px;
+    background: white;
+}
+
+.roster-workers {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.roster-empty {
+    font-size: 0.85em;
+    color: #999;
+    text-align: center;
+    padding: 20px 0;
+}
+
+/* Worker Chips */
+.worker-chip {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: grab;
+    user-select: none;
+    transition: opacity 0.2s, box-shadow 0.2s;
+    font-size: 0.85em;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+.worker-chip:active {
+    cursor: grabbing;
+    opacity: 0.8;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+.worker-chip-foreman {
+    background: #1565C0;
+    color: white;
+}
+
+.worker-chip-journeyman {
+    background: #2E7D32;
+    color: white;
+}
+
+.worker-chip-apprentice {
+    background: #E65100;
+    color: white;
+}
+
+.chip-name {
+    font-weight: 600;
+    font-size: 0.95em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chip-meta {
+    font-size: 0.78em;
+    opacity: 0.85;
+    margin-top: 1px;
+}
+
+.chip-small {
+    flex-direction: row;
+    align-items: center;
+    padding: 3px 7px;
+    gap: 4px;
+    font-size: 0.8em;
+    border-radius: 4px;
+}
+
+.chip-small .chip-name {
+    font-size: 0.9em;
+    flex: 1;
+}
+
+.chip-remove {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.8);
+    cursor: pointer;
+    font-size: 1em;
+    padding: 0 0 0 4px;
+    line-height: 1;
+    font-weight: 700;
+    margin: 0;
+    box-shadow: none;
+    border-radius: 0;
+    min-width: auto;
+}
+
+.chip-remove:hover {
+    color: white;
+    background: none;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Schedule Grid */
+.schedule-grid-container {
+    flex: 1;
+    overflow-x: auto;
+}
+
+.schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 600px;
+    table-layout: fixed;
+}
+
+.schedule-table thead th {
+    background: var(--primary-blue);
+    color: white;
+    padding: 10px 12px;
+    font-size: 0.9em;
+    font-weight: 600;
+    text-align: left;
+    border: 1px solid var(--dark-blue);
+}
+
+.col-job { width: 160px; }
+.col-week { width: auto; }
+
+.col-job-name {
+    padding: 10px 12px;
+    background: var(--light-gray);
+    border: 1px solid var(--border-gray);
+    vertical-align: top;
+}
+
+.sched-job-name {
+    font-weight: 600;
+    color: var(--text-dark);
+    font-size: 0.9em;
+    margin-bottom: 4px;
+}
+
+.sched-job-div {
+    font-size: 0.75em;
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    color: white;
+}
+
+.badge-commercial { background: #1565C0; }
+.badge-residential { background: #2E7D32; }
+
+/* Schedule Cells */
+.schedule-cell {
+    padding: 8px;
+    border: 1px solid var(--border-gray);
+    vertical-align: top;
+    min-width: 140px;
+    transition: background 0.15s;
+}
+
+.schedule-cell.drag-over {
+    outline: 2px dashed var(--primary-blue);
+    background: #e8f0fc !important;
+}
+
+.cell-inactive {
+    background: #f5f5f5;
+    opacity: 0.5;
+}
+
+.cell-no-demand {
+    background: #fafafa;
+}
+
+.cell-empty {
+    background: #fff3e0;
+}
+
+.cell-short {
+    background: #fff3e0;
+}
+
+.cell-full {
+    background: #e8f5e9;
+}
+
+.cell-over {
+    background: #e3f2fd;
+}
+
+.cell-demand-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+}
+
+.demand-label {
+    font-size: 0.75em;
+    color: #666;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.demand-input {
+    width: 44px;
+    padding: 2px 5px;
+    font-size: 0.85em;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    text-align: center;
+    font-family: inherit;
+    box-shadow: none;
+}
+
+.demand-input:focus {
+    border-color: var(--primary-blue);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 86, 160, 0.15);
+}
+
+.demand-input:disabled {
+    background: #eee;
+    color: #aaa;
+    cursor: not-allowed;
+}
+
+.assigned-count {
+    font-size: 0.75em;
+    color: #666;
+}
+
+.cell-workers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 28px;
+}
+
+.drop-hint {
+    font-size: 0.75em;
+    color: #aaa;
+    font-style: italic;
+    padding: 4px 0;
+}
+
+.schedule-empty-row {
+    text-align: center;
+    padding: 30px;
+    color: #999;
+    font-size: 0.95em;
+    background: var(--light-gray);
+}

@@ -104,6 +104,40 @@
                     <div class="gantt-chart" id="ganttChart"></div>
                 </div>
             </div>
+
+            <!-- 3-Week Lookahead Schedule -->
+            <div class="section full-width">
+                <h2>📅 3-Week Lookahead Schedule</h2>
+                <p class="section-subtitle">PM sets manpower demand per job per week. General Foreman drags workers onto jobs.</p>
+                <div class="schedule-wrapper">
+                    <div class="schedule-nav">
+                        <button class="schedule-nav-btn" onclick="shiftScheduleWeek(-1)">&#8249; Prev</button>
+                        <span class="schedule-week-range" id="scheduleWeekRange">Loading...</span>
+                        <button class="schedule-nav-btn" onclick="shiftScheduleWeek(1)">Next &#8250;</button>
+                    </div>
+                    <div class="schedule-body">
+                        <!-- Team Roster -->
+                        <div class="schedule-roster" id="scheduleRoster"
+                             ondragover="event.preventDefault(); this.classList.add('roster-drag-over')"
+                             ondragleave="this.classList.remove('roster-drag-over')"
+                             ondrop="dropWorkerToRoster(event)">
+                            <div class="roster-header">
+                                <h3>Team Roster</h3>
+                                <select id="rosterDivisionFilter" onchange="renderSchedule()">
+                                    <option value="all">All</option>
+                                    <option value="commercial">Commercial</option>
+                                    <option value="residential">Residential</option>
+                                </select>
+                            </div>
+                            <div class="roster-workers" id="rosterWorkers"></div>
+                        </div>
+                        <!-- Schedule Grid -->
+                        <div class="schedule-grid-container">
+                            <div id="scheduleGrid"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -228,11 +262,11 @@
                             <h4>Required CSV Format:</h4>
                             <p><code>name,role,division,isForeman</code></p>
                             <p style="margin-top: 8px;"><strong>Example:</strong></p>
-                            <p><code>John Smith,journeyman,commercial,true</code></p>
+                            <p><code>John Smith,journeyman,commercial,false</code></p>
                             <p><code>Jane Doe,apprentice,residential,false</code></p>
-                            <p><code>Mike Jones,master,both,true</code></p>
+                            <p><code>Mike Jones,foreman,both,true</code></p>
                             <p style="margin-top: 10px; font-size: 0.85em;">
-                                <strong>Role:</strong> master, journeyman, or apprentice<br>
+                                <strong>Role:</strong> foreman, journeyman, or apprentice<br>
                                 <strong>Division:</strong> commercial, residential, or both<br>
                                 <strong>isForeman:</strong> true or false
                             </p>
