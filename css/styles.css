@@ -242,6 +242,73 @@ header p {
     border-color: #4caf50;
 }
 
+/* Worker Availability Tracking */
+.chip-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.chip-availability {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border-gray);
+}
+
+.availability-bar {
+    flex: 1;
+    height: 6px;
+    background: #e0e0e0;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.availability-fill {
+    height: 100%;
+    background: #4caf50;
+    transition: all 0.3s ease;
+}
+
+.status-moderate .availability-fill {
+    background: #2196f3;
+}
+
+.status-busy .availability-fill {
+    background: #ff9800;
+}
+
+.status-full .availability-fill {
+    background: #dc3545;
+}
+
+.availability-text {
+    font-size: 0.7em;
+    font-weight: 600;
+    color: #666;
+    white-space: nowrap;
+    min-width: 42px;
+    text-align: right;
+}
+
+.status-available .availability-text {
+    color: #4caf50;
+}
+
+.status-moderate .availability-text {
+    color: #2196f3;
+}
+
+.status-busy .availability-text {
+    color: #ff9800;
+}
+
+.status-full .availability-text {
+    color: #dc3545;
+}
+
 /* Mini Worker Chips (in cells) */
 .worker-chip-mini {
     background: white;
@@ -572,47 +639,60 @@ header p {
 
 .job-actions {
     display: flex;
-    gap: 5px;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-}
-
-.job-row:hover .job-actions {
+    gap: 6px;
     opacity: 1;
 }
 
 .job-action-btn {
     background: white;
-    border: 2px solid var(--border-gray);
+    border: 1px solid var(--border-gray);
     border-radius: 4px;
-    width: 32px;
-    height: 32px;
+    padding: 4px 10px;
+    height: 28px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #666;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.2s ease;
+    white-space: nowrap;
 }
 
 .job-action-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    border-width: 2px;
+    padding: 3px 9px;
+}
+
+.edit-btn {
+    color: #2196f3;
+    border-color: #2196f3;
 }
 
 .edit-btn:hover {
     background: #2196f3;
-    border-color: #2196f3;
+    color: white;
+}
+
+.archive-btn {
+    color: #ff9800;
+    border-color: #ff9800;
 }
 
 .archive-btn:hover {
     background: #ff9800;
-    border-color: #ff9800;
+    color: white;
+}
+
+.remove-btn {
+    color: #dc3545;
+    border-color: #dc3545;
 }
 
 .remove-btn:hover {
     background: #dc3545;
-    border-color: #dc3545;
+    color: white;
 }
 
 /* Vacation Row Styles */

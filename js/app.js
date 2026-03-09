@@ -451,15 +451,73 @@ function renderRosterPanel() {
         return a.name.localeCompare(b.name);
     });
 
-    container.innerHTML = filtered.map(w => `
+    // Calculate scheduled days for each worker in visible weeks (18 days = 3 weeks × 6 days)
+    const totalDays = 18;
+    const workerScheduleCounts = {};
+
+    // Get all dates for 3 weeks
+    const dates = [];
+    for (let week = 0; week < 3; week++) {
+        const monday = getWeekMonday(scheduleWeekOffset + week);
+        for (let day = 0; day < 6; day++) {
+            const date = new Date(monday);
+            date.setDate(monday.getDate() + day);
+            dates.push(date);
+        }
+    }
+
+    // Count scheduled days for each worker
+    workers.forEach(w => {
+        let scheduledDays = 0;
+        dates.forEach(date => {
+            const dateKey = formatDate(date);
+            // Check if worker is scheduled on any job this day
+            const isScheduled = Object.keys(dailySchedule).some(key => {
+                if (key.includes(dateKey)) {
+                    return dailySchedule[key].assigned.includes(w.id);
+                }
+                return false;
+            });
+            // Also check if on vacation
+            const vacKey = `${w.id}_${dateKey}`;
+            const isOnVacation = vacationSchedule[vacKey];
+
+            if (isScheduled || isOnVacation) {
+                scheduledDays++;
+            }
+        });
+        workerScheduleCounts[w.id] = scheduledDays;
+    });
+
+    container.innerHTML = filtered.map(w => {
+        const scheduledDays = workerScheduleCounts[w.id] || 0;
+        const availableDays = totalDays - scheduledDays;
+        const percentFull = Math.round((scheduledDays / totalDays) * 100);
+
+        // Determine status class based on how full schedule is
+        let statusClass = 'status-available';
+        if (percentFull >= 90) statusClass = 'status-full';
+        else if (percentFull >= 70) statusClass = 'status-busy';
+        else if (percentFull >= 40) statusClass = 'status-moderate';
+
+        return `
         <div class="worker-chip worker-chip-${w.role}"
              draggable="true"
              ondragstart="dragWorkerStart(event, ${w.id}, null, null)"
-             title="${w.name} — ${w.role}${w.isForeman ? ' (Foreman)' : ''}">
-            <span class="chip-name">${w.name}</span>
-            <span class="chip-meta">${w.role}${w.isForeman ? ' ★' : ''}</span>
+             title="${w.name} — ${w.role}${w.isForeman ? ' (Foreman)' : ''}\n${scheduledDays} days scheduled, ${availableDays} available">
+            <div class="chip-main">
+                <span class="chip-name">${w.name}</span>
+                <span class="chip-meta">${w.role}${w.isForeman ? ' ★' : ''}</span>
+            </div>
+            <div class="chip-availability ${statusClass}">
+                <div class="availability-bar">
+                    <div class="availability-fill" style="width: ${percentFull}%"></div>
+                </div>
+                <span class="availability-text">${availableDays} free</span>
+            </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
 }
 
 /**
@@ -623,9 +681,9 @@ function renderScheduleGrid(dates) {
                             <div class="sched-job-div badge-${job.division}">${job.division}</div>
                         </div>
                         <div class="job-actions">
-                            <button class="job-action-btn edit-btn" onclick="editJob(${job.id}); event.stopPropagation();" title="Edit job">✏️</button>
-                            <button class="job-action-btn archive-btn" onclick="archiveJob(${job.id}); event.stopPropagation();" title="Archive job">📦</button>
-                            <button class="job-action-btn remove-btn" onclick="removeJob(${job.id}); event.stopPropagation();" title="Remove job">🗑️</button>
+                            <button class="job-action-btn edit-btn" onclick="editJob(${job.id}); event.stopPropagation();">Edit</button>
+                            <button class="job-action-btn archive-btn" onclick="archiveJob(${job.id}); event.stopPropagation();">Archive</button>
+                            <button class="job-action-btn remove-btn" onclick="removeJob(${job.id}); event.stopPropagation();">Delete</button>
                         </div>
                     </div>
                 </td>`;
