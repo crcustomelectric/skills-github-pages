@@ -3,13 +3,12 @@
 // See FIREBASE_SETUP.md for instructions
 
 const firebaseConfig = {
-    apiKey: "AIzaSyDRyuFZAM-U70-cFlXJom3IHb5UhSMIYrI",
-    authDomain: "manloader-ab285.firebaseapp.com",
-    databaseURL: "https://manloader-ab285-default-rtdb.firebaseio.com",
-    projectId: "manloader-ab285",
-    storageBucket: "manloader-ab285.firebasestorage.app",
-    messagingSenderId: "737435338955",
-    appId: "1:737435338955:web:fd574b022c925f3b01734e"
+  apiKey: "AIzaSyDRyuFZAM-U70-cFlXJom3IHb5UhSMIYrI",
+  authDomain: "manloader-ab285.firebaseapp.com",
+  projectId: "manloader-ab285",
+  storageBucket: "manloader-ab285.firebasestorage.app",
+  messagingSenderId: "737435338955",
+  appId: "1:737435338955:web:fd574b022c925f3b01734e"
 };
 
 // Initialize Firebase
