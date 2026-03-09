@@ -7,6 +7,7 @@
 let workers = [];
 let jobs = [];
 let dailySchedule = {}; // key: "jobId_dateString", value: { demand, assigned: [] }
+let vacationSchedule = {}; // key: "workerId_dateString", value: true (on vacation)
 let scheduleWeekOffset = 0; // weeks from current week for 3-week lookahead
 
 // Drag state for schedule
@@ -246,6 +247,14 @@ function renderRosterPanel() {
         return;
     }
 
+    // Sort by position (foreman > journeyman > apprentice), then alphabetically by name
+    const roleOrder = { 'foreman': 1, 'journeyman': 2, 'apprentice': 3 };
+    filtered.sort((a, b) => {
+        const roleCompare = (roleOrder[a.role] || 99) - (roleOrder[b.role] || 99);
+        if (roleCompare !== 0) return roleCompare;
+        return a.name.localeCompare(b.name);
+    });
+
     container.innerHTML = filtered.map(w => `
         <div class="worker-chip worker-chip-${w.role}"
              draggable="true"
@@ -285,14 +294,54 @@ function renderScheduleGrid(dates) {
     html += `</tr><tr class="day-headers">
                 <th class="col-job"></th>`;
 
-    // Day headers (18 columns = 3 weeks × 6 days)
-    for (let week = 0; week < 3; week++) {
-        dayNames.forEach(day => {
-            html += `<th class="col-day">${day}</th>`;
-        });
-    }
+    // Day headers (18 columns = 3 weeks × 6 days) with dates
+    dates.forEach(date => {
+        const dayName = dayNames[date.getDay() === 0 ? 6 : date.getDay() - 1];
+        const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+        html += `<th class="col-day">${dayName}<br><small>${dateStr}</small></th>`;
+    });
 
     html += `</tr></thead><tbody>`;
+
+    // Add worker availability tally row
+    html += `<tr class="tally-row">
+        <td class="col-job-name"><strong>Daily Totals</strong></td>`;
+
+    dates.forEach(date => {
+        const dateKey = getDateKey(date);
+
+        // Count workers assigned to ANY job on this date
+        const assignedWorkerIds = new Set();
+        Object.keys(dailySchedule).forEach(key => {
+            if (key.endsWith(`_${dateKey}`)) {
+                const slot = dailySchedule[key];
+                if (slot.assigned) {
+                    slot.assigned.forEach(wId => assignedWorkerIds.add(wId));
+                }
+            }
+        });
+
+        // Count total available workers (not on vacation)
+        const vacationCount = Object.keys(vacationSchedule).filter(key =>
+            key.endsWith(`_${dateKey}`) && vacationSchedule[key]
+        ).length;
+        const totalAvailable = workers.length - vacationCount;
+        const assignedCount = assignedWorkerIds.size;
+
+        // Determine cell status
+        const isFullyStaffed = assignedCount === totalAvailable && totalAvailable > 0;
+        const tallyClass = isFullyStaffed ? 'tally-full' : 'tally-partial';
+
+        html += `<td class="tally-cell ${tallyClass}">
+            <div class="tally-display">
+                <span class="tally-assigned">${assignedCount}</span>
+                <span class="tally-separator">/</span>
+                <span class="tally-available">${totalAvailable}</span>
+            </div>
+        </td>`;
+    });
+
+    html += `</tr>`;
 
     if (activeJobs.length === 0) {
         html += `<tr><td colspan="19" class="schedule-empty-row">No active jobs. Click "+ Add Job" to get started.</td></tr>`;
@@ -383,6 +432,21 @@ function dropWorkerToCell(event, jobId, dateKey) {
         return;
     }
 
+    // Check if worker is already assigned to a different job on this date
+    const isAlreadyAssignedToday = Object.keys(dailySchedule).some(key => {
+        if (!key.endsWith(`_${dateKey}`)) return false; // Different date
+        if (key === slotKey) return false; // Same cell
+        return dailySchedule[key].assigned && dailySchedule[key].assigned.includes(draggingWorkerId);
+    });
+
+    if (isAlreadyAssignedToday && (draggingFromJob === null || draggingFromDate !== dateKey)) {
+        const worker = workers.find(w => w.id === draggingWorkerId);
+        const workerName = worker ? worker.name : 'This worker';
+        alert(`${workerName} is already assigned to another job on this day.`);
+        draggingWorkerId = draggingFromJob = draggingFromDate = null;
+        return;
+    }
+
     // Remove from source cell if dragging between cells
     if (draggingFromJob !== null && draggingFromDate !== null) {
         const fromKey = `${draggingFromJob}_${draggingFromDate}`;
@@ -442,10 +506,12 @@ function saveData() {
         database.ref('workers').set(workers);
         database.ref('jobs').set(jobs);
         database.ref('dailySchedule').set(dailySchedule);
+        database.ref('vacationSchedule').set(vacationSchedule);
     } else {
         localStorage.setItem('workers', JSON.stringify(workers));
         localStorage.setItem('jobs', JSON.stringify(jobs));
         localStorage.setItem('dailySchedule', JSON.stringify(dailySchedule));
+        localStorage.setItem('vacationSchedule', JSON.stringify(vacationSchedule));
     }
 }
 
@@ -477,10 +543,17 @@ function initializeData() {
             dailySchedule = data || {};
             renderSchedule();
         });
+
+        database.ref('vacationSchedule').on('value', (snapshot) => {
+            const data = snapshot.val();
+            vacationSchedule = data || {};
+            renderSchedule();
+        });
     } else {
         workers = JSON.parse(localStorage.getItem('workers')) || [];
         jobs = JSON.parse(localStorage.getItem('jobs')) || [];
         dailySchedule = JSON.parse(localStorage.getItem('dailySchedule')) || {};
+        vacationSchedule = JSON.parse(localStorage.getItem('vacationSchedule')) || {};
         renderWorkers();
         renderJobs();
         renderSchedule();
