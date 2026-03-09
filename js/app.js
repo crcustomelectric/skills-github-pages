@@ -492,5 +492,11 @@ function initializeData() {
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', function() {
+    // Try to initialize Firebase first
+    if (typeof firebase !== 'undefined' && typeof initializeFirebase === 'function') {
+        initializeFirebase();
+    }
+
+    // Then load data
     initializeData();
 });
