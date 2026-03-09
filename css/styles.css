@@ -429,12 +429,145 @@ header p {
     font-size: 1.1em;
 }
 
+/* Job Row Drag and Drop */
+.job-row {
+    cursor: grab;
+    transition: all 0.2s ease;
+}
+
+.job-row:active {
+    cursor: grabbing;
+}
+
+.job-row.dragging {
+    opacity: 0.5;
+    background: #e3f2fd;
+}
+
+.job-row:hover {
+    background: #f5f5f5;
+}
+
+/* Job Name Cell with Hover Actions */
+.job-name-cell {
+    position: relative;
+}
+
+.job-info-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.job-info {
+    flex: 1;
+}
+
+.job-actions {
+    display: flex;
+    gap: 5px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.job-row:hover .job-actions {
+    opacity: 1;
+}
+
+.job-action-btn {
+    background: white;
+    border: 2px solid var(--border-gray);
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.job-action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.edit-btn:hover {
+    background: #2196f3;
+    border-color: #2196f3;
+}
+
+.archive-btn:hover {
+    background: #ff9800;
+    border-color: #ff9800;
+}
+
+.remove-btn:hover {
+    background: #dc3545;
+    border-color: #dc3545;
+}
+
+/* Vacation Row Styles */
+.vacation-row {
+    background: #fff8e1;
+    border-top: 2px solid #ff9800;
+}
+
+.vacation-row .col-job-name {
+    background: #fff8e1;
+}
+
+.cell-vacation {
+    background: #fffde7;
+    min-height: 60px;
+}
+
+.cell-vacation .cell-workers {
+    min-height: 40px;
+}
+
 /* Tally Row Styles */
 .tally-row {
     background: #f0f4f8;
     font-weight: 600;
-    border-top: 2px solid var(--primary-blue);
-    border-bottom: 2px solid var(--primary-blue);
+    border-top: 3px solid var(--primary-blue);
+    border-bottom: 3px solid var(--primary-blue);
+}
+
+.tally-legend {
+    display: flex;
+    gap: 10px;
+    margin-top: 5px;
+    font-size: 0.7em;
+    font-weight: 500;
+    color: #666;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.legend-dot.needed {
+    background: #ff9800;
+}
+
+.legend-dot.assigned {
+    background: #2196f3;
+}
+
+.legend-dot.available {
+    background: #4caf50;
 }
 
 .tally-cell {
@@ -450,28 +583,43 @@ header p {
     align-items: center;
     justify-content: center;
     gap: 4px;
-    font-size: 0.95em;
+    font-size: 0.9em;
+}
+
+.tally-needed {
+    font-weight: 700;
+    color: #ff9800;
 }
 
 .tally-assigned {
     font-weight: 700;
-    font-size: 1.1em;
+    color: #2196f3;
 }
 
 .tally-separator {
-    color: #666;
+    color: #999;
+    font-weight: 400;
 }
 
 .tally-available {
-    color: #666;
+    font-weight: 700;
+    color: #4caf50;
 }
 
-.tally-full {
-    background: #c8e6c9;
+.tally-neutral {
+    background: #f5f5f5;
 }
 
-.tally-partial {
-    background: #fff9c4;
+.tally-short {
+    background: #ffebee;
+}
+
+.tally-perfect {
+    background: #e8f5e9;
+}
+
+.tally-over {
+    background: #fff3e0;
 }
 
 /* Modal Styles */
@@ -659,6 +807,11 @@ input:focus, select:focus {
 
 .badge-both {
     background: #795548;
+    color: white;
+}
+
+.badge-vacation {
+    background: #ff9800;
     color: white;
 }
 

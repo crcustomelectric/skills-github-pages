@@ -15,6 +15,9 @@ let draggingWorkerId = null;
 let draggingFromJob = null;
 let draggingFromDate = null;
 
+// Drag state for job reordering
+let draggingJobId = null;
+
 // ============================================================================
 // Modal Functions
 // ============================================================================
@@ -149,9 +152,16 @@ function removeWorker(id) {
 }
 
 /**
- * Remove a job
+ * Remove a job (with confirmation)
  */
 function removeJob(id) {
+    const job = jobs.find(j => j.id === id);
+    if (!job) return;
+
+    if (!confirm(`Are you sure you want to remove "${job.name}"? This will delete all schedule assignments for this job.`)) {
+        return;
+    }
+
     // Remove all schedule entries for this job
     Object.keys(dailySchedule).forEach(key => {
         if (key.startsWith(`${id}_`)) {
@@ -163,6 +173,33 @@ function removeJob(id) {
     saveData();
     renderJobs();
     renderSchedule();
+}
+
+/**
+ * Archive a job (marks as inactive)
+ */
+function archiveJob(id) {
+    const job = jobs.find(j => j.id === id);
+    if (!job) return;
+
+    job.active = false;
+    saveData();
+    renderSchedule();
+}
+
+/**
+ * Edit a job (placeholder for future implementation)
+ */
+function editJob(id) {
+    const job = jobs.find(j => j.id === id);
+    if (!job) return;
+
+    const newName = prompt('Edit job name:', job.name);
+    if (newName && newName.trim()) {
+        job.name = newName.trim();
+        saveData();
+        renderSchedule();
+    }
 }
 
 // ============================================================================
@@ -303,14 +340,66 @@ function renderScheduleGrid(dates) {
 
     html += `</tr></thead><tbody>`;
 
-    // Add worker availability tally row
-    html += `<tr class="tally-row">
-        <td class="col-job-name"><strong>Daily Totals</strong></td>`;
+    // Add Vacation/Time Off row (persistent)
+    html += `<tr class="vacation-row">
+        <td class="col-job-name">
+            <div class="sched-job-name">🏖️ Vacation / Time Off</div>
+            <div class="sched-job-div badge-vacation">Time Off</div>
+        </td>`;
 
     dates.forEach(date => {
         const dateKey = getDateKey(date);
 
-        // Count workers assigned to ANY job on this date
+        // Find workers on vacation this day
+        const vacationWorkers = workers.filter(w => {
+            const vacKey = `${w.id}_${dateKey}`;
+            return vacationSchedule[vacKey];
+        });
+
+        html += `<td class="schedule-cell cell-vacation"
+                     ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                     ondragleave="this.classList.remove('drag-over')"
+                     ondrop="dropWorkerToVacation(event, '${dateKey}')">
+            <div class="cell-workers">
+                ${vacationWorkers.map(w => `
+                    <div class="worker-chip-mini worker-chip-${w.role}"
+                         draggable="true"
+                         ondragstart="dragWorkerStart(event, ${w.id}, 'vacation', '${dateKey}')"
+                         title="${w.name} - Time Off">
+                        <span class="chip-name-mini">${w.name.split(' ')[0]}</span>
+                        <button class="chip-remove" onclick="removeVacation(${w.id}, '${dateKey}'); event.stopPropagation()">×</button>
+                    </div>
+                `).join('')}
+            </div>
+        </td>`;
+    });
+
+    html += `</tr>`;
+
+    // Add worker availability tally row with needed/assigned/available
+    html += `<tr class="tally-row">
+        <td class="col-job-name">
+            <strong>Daily Totals</strong>
+            <div class="tally-legend">
+                <span class="legend-item"><span class="legend-dot needed"></span>Need</span>
+                <span class="legend-item"><span class="legend-dot assigned"></span>Assigned</span>
+                <span class="legend-item"><span class="legend-dot available"></span>Avail</span>
+            </div>
+        </td>`;
+
+    dates.forEach(date => {
+        const dateKey = getDateKey(date);
+
+        // Calculate NEEDED (sum of all job demands for this day)
+        let totalNeeded = 0;
+        Object.keys(dailySchedule).forEach(key => {
+            if (key.endsWith(`_${dateKey}`)) {
+                const slot = dailySchedule[key];
+                totalNeeded += parseInt(slot.demand) || 0;
+            }
+        });
+
+        // Calculate ASSIGNED (unique workers assigned to jobs on this date)
         const assignedWorkerIds = new Set();
         Object.keys(dailySchedule).forEach(key => {
             if (key.endsWith(`_${dateKey}`)) {
@@ -320,23 +409,30 @@ function renderScheduleGrid(dates) {
                 }
             }
         });
+        const assignedCount = assignedWorkerIds.size;
 
-        // Count total available workers (not on vacation)
+        // Calculate AVAILABLE (total workers minus those on vacation)
         const vacationCount = Object.keys(vacationSchedule).filter(key =>
             key.endsWith(`_${dateKey}`) && vacationSchedule[key]
         ).length;
-        const totalAvailable = workers.length - vacationCount;
-        const assignedCount = assignedWorkerIds.size;
+        const totalWorkers = workers.length;
+        const availableCount = totalWorkers - vacationCount;
 
-        // Determine cell status
-        const isFullyStaffed = assignedCount === totalAvailable && totalAvailable > 0;
-        const tallyClass = isFullyStaffed ? 'tally-full' : 'tally-partial';
+        // Determine cell status color
+        let tallyClass = 'tally-neutral';
+        if (totalNeeded > 0) {
+            if (assignedCount < totalNeeded) tallyClass = 'tally-short';
+            else if (assignedCount === totalNeeded) tallyClass = 'tally-perfect';
+            else tallyClass = 'tally-over';
+        }
 
         html += `<td class="tally-cell ${tallyClass}">
             <div class="tally-display">
-                <span class="tally-assigned">${assignedCount}</span>
+                <span class="tally-needed" title="Workers needed">${totalNeeded}</span>
                 <span class="tally-separator">/</span>
-                <span class="tally-available">${totalAvailable}</span>
+                <span class="tally-assigned" title="Workers assigned">${assignedCount}</span>
+                <span class="tally-separator">/</span>
+                <span class="tally-available" title="Workers available">${availableCount}</span>
             </div>
         </td>`;
     });
@@ -347,10 +443,24 @@ function renderScheduleGrid(dates) {
         html += `<tr><td colspan="19" class="schedule-empty-row">No active jobs. Click "+ Add Job" to get started.</td></tr>`;
     } else {
         activeJobs.forEach(job => {
-            html += `<tr>
-                <td class="col-job-name">
-                    <div class="sched-job-name">${job.name}</div>
-                    <div class="sched-job-div badge-${job.division}">${job.division}</div>
+            html += `<tr class="job-row"
+                         draggable="true"
+                         ondragstart="dragJobStart(event, ${job.id})"
+                         ondragover="dragJobOver(event, ${job.id})"
+                         ondrop="dropJob(event, ${job.id})"
+                         ondragend="dragJobEnd(event)">
+                <td class="col-job-name job-name-cell">
+                    <div class="job-info-wrapper">
+                        <div class="job-info">
+                            <div class="sched-job-name">${job.name}</div>
+                            <div class="sched-job-div badge-${job.division}">${job.division}</div>
+                        </div>
+                        <div class="job-actions">
+                            <button class="job-action-btn edit-btn" onclick="editJob(${job.id}); event.stopPropagation();" title="Edit job">✏️</button>
+                            <button class="job-action-btn archive-btn" onclick="archiveJob(${job.id}); event.stopPropagation();" title="Archive job">📦</button>
+                            <button class="job-action-btn remove-btn" onclick="removeJob(${job.id}); event.stopPropagation();" title="Remove job">🗑️</button>
+                        </div>
+                    </div>
                 </td>`;
 
             // Render each day cell
@@ -408,6 +518,45 @@ function renderScheduleGrid(dates) {
 // Drag & Drop Handlers
 // ============================================================================
 
+// Job reordering drag handlers
+function dragJobStart(event, jobId) {
+    draggingJobId = jobId;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(jobId));
+    event.target.closest('tr').classList.add('dragging');
+}
+
+function dragJobOver(event, targetJobId) {
+    event.preventDefault();
+    if (draggingJobId === null || draggingJobId === targetJobId) return;
+    event.dataTransfer.dropEffect = 'move';
+}
+
+function dropJob(event, targetJobId) {
+    event.preventDefault();
+    if (draggingJobId === null || draggingJobId === targetJobId) return;
+
+    // Find current positions
+    const dragIndex = jobs.findIndex(j => j.id === draggingJobId);
+    const targetIndex = jobs.findIndex(j => j.id === targetJobId);
+
+    if (dragIndex === -1 || targetIndex === -1) return;
+
+    // Reorder the jobs array
+    const [draggedJob] = jobs.splice(dragIndex, 1);
+    jobs.splice(targetIndex, 0, draggedJob);
+
+    draggingJobId = null;
+    saveData();
+    renderSchedule();
+}
+
+function dragJobEnd(event) {
+    event.target.closest('tr')?.classList.remove('dragging');
+    draggingJobId = null;
+}
+
+// Worker drag handlers
 function dragWorkerStart(event, workerId, fromJob, fromDate) {
     draggingWorkerId = workerId;
     draggingFromJob = fromJob;
@@ -467,14 +616,56 @@ function dropWorkerToRoster(event) {
 
     // Remove from source cell
     if (draggingFromJob !== null && draggingFromDate !== null) {
-        const fromKey = `${draggingFromJob}_${draggingFromDate}`;
-        if (dailySchedule[fromKey]) {
-            dailySchedule[fromKey].assigned = dailySchedule[fromKey].assigned.filter(id => id !== draggingWorkerId);
-            saveData();
-            renderSchedule();
+        if (draggingFromJob === 'vacation') {
+            // Remove from vacation
+            const vacKey = `${draggingWorkerId}_${draggingFromDate}`;
+            delete vacationSchedule[vacKey];
+        } else {
+            // Remove from job
+            const fromKey = `${draggingFromJob}_${draggingFromDate}`;
+            if (dailySchedule[fromKey]) {
+                dailySchedule[fromKey].assigned = dailySchedule[fromKey].assigned.filter(id => id !== draggingWorkerId);
+            }
         }
+        saveData();
+        renderSchedule();
     }
     draggingWorkerId = draggingFromJob = draggingFromDate = null;
+}
+
+function dropWorkerToVacation(event, dateKey) {
+    event.preventDefault();
+    event.target.closest('.schedule-cell')?.classList.remove('drag-over');
+
+    if (!draggingWorkerId) return;
+
+    // Remove from source if dragging between cells
+    if (draggingFromJob !== null && draggingFromDate !== null) {
+        if (draggingFromJob === 'vacation') {
+            const fromKey = `${draggingWorkerId}_${draggingFromDate}`;
+            delete vacationSchedule[fromKey];
+        } else {
+            const fromKey = `${draggingFromJob}_${draggingFromDate}`;
+            if (dailySchedule[fromKey]) {
+                dailySchedule[fromKey].assigned = dailySchedule[fromKey].assigned.filter(id => id !== draggingWorkerId);
+            }
+        }
+    }
+
+    // Add to vacation
+    const vacKey = `${draggingWorkerId}_${dateKey}`;
+    vacationSchedule[vacKey] = true;
+
+    saveData();
+    renderSchedule();
+    draggingWorkerId = draggingFromJob = draggingFromDate = null;
+}
+
+function removeVacation(workerId, dateKey) {
+    const vacKey = `${workerId}_${dateKey}`;
+    delete vacationSchedule[vacKey];
+    saveData();
+    renderSchedule();
 }
 
 function setDemand(jobId, dateKey, value) {
