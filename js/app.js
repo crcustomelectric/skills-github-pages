@@ -7,8 +7,15 @@
 let workers = [];
 let jobs = [];
 let assignments = [];
+let weeklySchedule = {}; // key: "jobId_weekStart", value: { demand, assigned: [] }
 let currentDivision = 'all'; // all, commercial, residential
 let editingWorkerId = null; // Track which worker is being edited
+let scheduleWeekOffset = 0; // weeks from current week for 3-week lookahead
+
+// Drag state for schedule
+let draggingWorkerId = null;
+let draggingFromJob = null;
+let draggingFromWeek = null;
 
 // ============================================================================
 // UI Helper Functions
@@ -780,9 +787,11 @@ function saveData() {
     if (database) {
         database.ref('workers').set(workers);
         database.ref('jobs').set(jobs);
+        database.ref('weeklySchedule').set(weeklySchedule);
     } else {
         localStorage.setItem('workers', JSON.stringify(workers));
         localStorage.setItem('jobs', JSON.stringify(jobs));
+        localStorage.setItem('weeklySchedule', JSON.stringify(weeklySchedule));
     }
 }
 
@@ -791,35 +800,287 @@ function saveData() {
  */
 function initializeData() {
     if (database) {
-        // Listen for workers changes
         database.ref('workers').on('value', (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 workers = data;
                 renderWorkers();
                 renderManpowerGraph();
+                renderSchedule();
                 updateStats();
             }
         });
 
-        // Listen for jobs changes
         database.ref('jobs').on('value', (snapshot) => {
             const data = snapshot.val();
             if (data) {
                 jobs = data;
                 renderJobs();
                 renderManpowerGraph();
+                renderSchedule();
                 updateStats();
             }
         });
+
+        database.ref('weeklySchedule').on('value', (snapshot) => {
+            const data = snapshot.val();
+            weeklySchedule = data || {};
+            renderSchedule();
+        });
     } else {
-        // Fallback to localStorage
         workers = JSON.parse(localStorage.getItem('workers')) || [];
         jobs = JSON.parse(localStorage.getItem('jobs')) || [];
+        weeklySchedule = JSON.parse(localStorage.getItem('weeklySchedule')) || {};
         renderWorkers();
         renderJobs();
         renderManpowerGraph();
+        renderSchedule();
         updateStats();
+    }
+}
+
+// ============================================================================
+// 3-Week Schedule Functions
+// ============================================================================
+
+/**
+ * Get the Monday of the week that contains the given date, offset by N weeks
+ */
+function getWeekMonday(offsetWeeks) {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + daysToMonday + (offsetWeeks * 7));
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+}
+
+function getWeekKey(weekStart) {
+    return weekStart.toISOString().split('T')[0];
+}
+
+function formatWeekHeader(weekStart) {
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 4); // Friday
+    const opts = { month: 'short', day: 'numeric' };
+    return `${weekStart.toLocaleDateString('en-US', opts)} – ${weekEnd.toLocaleDateString('en-US', opts)}`;
+}
+
+function shiftScheduleWeek(delta) {
+    scheduleWeekOffset += delta;
+    renderSchedule();
+}
+
+function renderSchedule() {
+    const weeks = [0, 1, 2].map(i => getWeekMonday(scheduleWeekOffset + i));
+    const weekKeys = weeks.map(w => getWeekKey(w));
+
+    // Update week range label
+    const rangeStart = weeks[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const rangeEnd = new Date(weeks[2]);
+    rangeEnd.setDate(rangeEnd.getDate() + 4);
+    const rangeEndStr = rangeEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const label = document.getElementById('scheduleWeekRange');
+    if (label) label.textContent = `${rangeStart} – ${rangeEndStr}`;
+
+    renderRosterPanel();
+    renderScheduleGrid(weeks, weekKeys);
+}
+
+function renderRosterPanel() {
+    const filter = document.getElementById('rosterDivisionFilter');
+    const filterVal = filter ? filter.value : 'all';
+    const container = document.getElementById('rosterWorkers');
+    if (!container) return;
+
+    let filtered = filterVal === 'all'
+        ? workers
+        : workers.filter(w => w.division === filterVal || w.division === 'both');
+
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="roster-empty">No workers added yet</div>';
+        return;
+    }
+
+    container.innerHTML = filtered.map(w => `
+        <div class="worker-chip worker-chip-${w.role}"
+             draggable="true"
+             ondragstart="dragWorkerStart(event, ${w.id}, null, null)"
+             title="${w.name} — ${w.role}${w.isForeman ? ' (Foreman)' : ''}">
+            <span class="chip-name">${w.name}</span>
+            <span class="chip-meta">${w.role}${w.isForeman ? ' ★' : ''}</span>
+        </div>
+    `).join('');
+}
+
+function renderScheduleGrid(weeks, weekKeys) {
+    const container = document.getElementById('scheduleGrid');
+    if (!container) return;
+
+    const windowStart = weeks[0];
+    const windowEnd = new Date(weeks[2]);
+    windowEnd.setDate(windowEnd.getDate() + 6);
+
+    let activeJobs = jobs.filter(job => {
+        if (!job.startDate || !job.endDate) return false;
+        const s = new Date(job.startDate + 'T00:00:00');
+        const e = new Date(job.endDate + 'T00:00:00');
+        return s <= windowEnd && e >= windowStart;
+    });
+
+    if (currentDivision !== 'all') {
+        activeJobs = activeJobs.filter(j => j.division === currentDivision);
+    }
+
+    let html = `<table class="schedule-table">
+        <thead>
+            <tr>
+                <th class="col-job">Job Site</th>
+                ${weeks.map(w => `<th class="col-week">${formatWeekHeader(w)}</th>`).join('')}
+            </tr>
+        </thead>
+        <tbody>`;
+
+    if (activeJobs.length === 0) {
+        html += `<tr><td colspan="4" class="schedule-empty-row">No active jobs in this 3-week window</td></tr>`;
+    } else {
+        activeJobs.forEach(job => {
+            html += `<tr><td class="col-job-name">
+                <div class="sched-job-name">${job.name}</div>
+                <div class="sched-job-div badge-${job.division}">${job.division}</div>
+            </td>`;
+
+            weeks.forEach((week, i) => {
+                const weekKey = weekKeys[i];
+                const slotKey = `${job.id}_${weekKey}`;
+                const slot = weeklySchedule[slotKey] || { demand: 0, assigned: [] };
+                const demand = parseInt(slot.demand) || 0;
+                const assigned = (slot.assigned || []).filter(id => workers.find(w => w.id === id));
+
+                // Is job active this week?
+                const jobStart = new Date(job.startDate + 'T00:00:00');
+                const jobEnd = new Date(job.endDate + 'T00:00:00');
+                const weekEnd = new Date(week);
+                weekEnd.setDate(week.getDate() + 6);
+                const isActive = jobStart <= weekEnd && jobEnd >= week;
+
+                let statusClass = 'cell-inactive';
+                if (isActive) {
+                    if (demand === 0) statusClass = 'cell-no-demand';
+                    else if (assigned.length === 0) statusClass = 'cell-empty';
+                    else if (assigned.length < demand) statusClass = 'cell-short';
+                    else if (assigned.length === demand) statusClass = 'cell-full';
+                    else statusClass = 'cell-over';
+                }
+
+                const assignedWorkers = assigned.map(id => workers.find(w => w.id === id)).filter(Boolean);
+
+                html += `<td class="schedule-cell ${statusClass}"
+                             ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                             ondragleave="this.classList.remove('drag-over')"
+                             ondrop="dropWorkerToCell(event, ${job.id}, '${weekKey}')">
+                    <div class="cell-demand-row">
+                        <label class="demand-label">Need</label>
+                        <input type="number" class="demand-input" value="${demand}" min="0" max="99"
+                               ${!isActive ? 'disabled' : ''}
+                               onchange="setDemand(${job.id}, '${weekKey}', this.value)"
+                               onclick="event.stopPropagation()">
+                        <span class="assigned-count">${assigned.length} assigned</span>
+                    </div>
+                    <div class="cell-workers">
+                        ${assignedWorkers.map(w => `
+                            <div class="worker-chip worker-chip-${w.role} chip-small"
+                                 draggable="true"
+                                 ondragstart="dragWorkerStart(event, ${w.id}, ${job.id}, '${weekKey}')"
+                                 title="${w.name}">
+                                <span class="chip-name">${w.name.split(' ')[0]}</span>
+                                <button class="chip-remove" onclick="removeScheduleWorker(${job.id}, '${weekKey}', ${w.id}); event.stopPropagation()">×</button>
+                            </div>
+                        `).join('')}
+                        ${isActive && assigned.length === 0 && demand > 0 ? '<div class="drop-hint">Drop workers here</div>' : ''}
+                    </div>
+                </td>`;
+            });
+
+            html += `</tr>`;
+        });
+    }
+
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+}
+
+// ---- Drag & Drop ----
+
+function dragWorkerStart(event, workerId, fromJob, fromWeek) {
+    draggingWorkerId = workerId;
+    draggingFromJob = fromJob;
+    draggingFromWeek = fromWeek;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', String(workerId));
+}
+
+function dropWorkerToCell(event, jobId, weekKey) {
+    event.preventDefault();
+    event.target.closest('.schedule-cell')?.classList.remove('drag-over');
+
+    if (!draggingWorkerId) return;
+
+    const slotKey = `${jobId}_${weekKey}`;
+    if (!weeklySchedule[slotKey]) weeklySchedule[slotKey] = { demand: 0, assigned: [] };
+    if (!Array.isArray(weeklySchedule[slotKey].assigned)) weeklySchedule[slotKey].assigned = [];
+
+    // Don't add duplicate
+    if (weeklySchedule[slotKey].assigned.includes(draggingWorkerId)) {
+        draggingWorkerId = draggingFromJob = draggingFromWeek = null;
+        return;
+    }
+
+    // Remove from source cell if dragging between cells
+    if (draggingFromJob !== null && draggingFromWeek !== null) {
+        const fromKey = `${draggingFromJob}_${draggingFromWeek}`;
+        if (weeklySchedule[fromKey]) {
+            weeklySchedule[fromKey].assigned = weeklySchedule[fromKey].assigned.filter(id => id !== draggingWorkerId);
+        }
+    }
+
+    weeklySchedule[slotKey].assigned.push(draggingWorkerId);
+    saveData();
+    renderSchedule();
+    draggingWorkerId = draggingFromJob = draggingFromWeek = null;
+}
+
+function dropWorkerToRoster(event) {
+    event.preventDefault();
+    document.getElementById('scheduleRoster')?.classList.remove('roster-drag-over');
+
+    // Remove from source cell
+    if (draggingFromJob !== null && draggingFromWeek !== null) {
+        const fromKey = `${draggingFromJob}_${draggingFromWeek}`;
+        if (weeklySchedule[fromKey]) {
+            weeklySchedule[fromKey].assigned = weeklySchedule[fromKey].assigned.filter(id => id !== draggingWorkerId);
+            saveData();
+            renderSchedule();
+        }
+    }
+    draggingWorkerId = draggingFromJob = draggingFromWeek = null;
+}
+
+function setDemand(jobId, weekKey, value) {
+    const slotKey = `${jobId}_${weekKey}`;
+    if (!weeklySchedule[slotKey]) weeklySchedule[slotKey] = { demand: 0, assigned: [] };
+    weeklySchedule[slotKey].demand = parseInt(value) || 0;
+    saveData();
+    renderSchedule();
+}
+
+function removeScheduleWorker(jobId, weekKey, workerId) {
+    const slotKey = `${jobId}_${weekKey}`;
+    if (weeklySchedule[slotKey]) {
+        weeklySchedule[slotKey].assigned = weeklySchedule[slotKey].assigned.filter(id => id !== workerId);
+        saveData();
+        renderSchedule();
     }
 }
 
@@ -846,7 +1107,7 @@ function importWorkersCSV(event) {
         console.log('=== CSV IMPORT: WORKERS ===');
         console.log(`Total lines in file: ${lines.length}`);
         console.log('Expected format: name,role,division,isForeman');
-        console.log('Valid roles: master, journeyman, apprentice');
+        console.log('Valid roles: foreman, journeyman, apprentice');
         console.log('Valid divisions: commercial, residential, both');
         console.log('Valid isForeman: true, false');
         console.log('---');
@@ -879,8 +1140,8 @@ function importWorkersCSV(event) {
                 continue;
             }
 
-            if (!['master', 'journeyman', 'apprentice'].includes(role)) {
-                const error = `Row ${rowNum}: Invalid role "${role}" for ${name}. Must be: master, journeyman, or apprentice`;
+            if (!['foreman', 'journeyman', 'apprentice'].includes(role)) {
+                const error = `Row ${rowNum}: Invalid role "${role}" for ${name}. Must be: foreman, journeyman, or apprentice`;
                 console.error(`❌ ${error}`);
                 errors.push(error);
                 errorCount++;
@@ -1086,11 +1347,11 @@ function importJobsCSV(event) {
  */
 function downloadWorkerTemplate() {
     const csv = `name,role,division,isForeman
-John Smith,journeyman,commercial,true
+John Smith,journeyman,commercial,false
 Jane Doe,apprentice,residential,false
-Mike Jones,master,both,true
+Mike Jones,foreman,both,true
 Sarah Williams,journeyman,commercial,false
-Tom Brown,master,residential,true`;
+Tom Brown,foreman,residential,true`;
 
     downloadCSV(csv, 'worker_template.csv');
 }
