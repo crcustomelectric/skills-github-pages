@@ -363,10 +363,21 @@ header p {
 }
 
 .schedule-table thead {
+    background: white;
+}
+
+.week-headers {
     position: sticky;
     top: 0;
+    z-index: 12;
     background: white;
-    z-index: 10;
+}
+
+.day-headers {
+    position: sticky;
+    top: 42px; /* Height of week-headers row */
+    z-index: 12;
+    background: white;
 }
 
 .schedule-table th {
@@ -383,8 +394,8 @@ header p {
     text-align: left;
     position: sticky;
     left: 0;
-    background: white;
-    z-index: 11;
+    background: var(--light-gray);
+    z-index: 13;
 }
 
 .col-week-header {
@@ -699,10 +710,18 @@ header p {
 .vacation-row {
     background: #fff8e1;
     border-top: 2px solid #ff9800;
+    position: sticky;
+    top: 144px; /* Below week-headers (42px) + day-headers (42px) + tally-row (~60px) */
+    z-index: 11;
+}
+
+.vacation-row td {
+    background: #fff8e1;
 }
 
 .vacation-row .col-job-name {
     background: #fff8e1;
+    z-index: 13;
 }
 
 .cell-vacation {
@@ -806,13 +825,17 @@ header p {
     border-top: 3px solid var(--primary-blue);
     border-bottom: 3px solid var(--primary-blue);
     position: sticky;
-    top: 80px; /* Position below the sticky thead (week + day headers) */
-    z-index: 9;
+    top: 84px; /* Below week-headers (42px) + day-headers (42px) */
+    z-index: 11;
+}
+
+.tally-row td {
+    background: #f0f4f8;
 }
 
 .tally-row .col-job-name {
     background: #f0f4f8;
-    z-index: 10;
+    z-index: 13;
 }
 
 .tally-legend {
