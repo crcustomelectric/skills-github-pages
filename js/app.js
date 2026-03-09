@@ -474,7 +474,8 @@ function renderRosterPanel() {
             // Check if worker is scheduled on any job this day
             const isScheduled = Object.keys(dailySchedule).some(key => {
                 if (key.includes(dateKey)) {
-                    return dailySchedule[key].assigned.includes(w.id);
+                    const slot = dailySchedule[key];
+                    return slot && slot.assigned && slot.assigned.includes(w.id);
                 }
                 return false;
             });
@@ -525,9 +526,13 @@ function renderRosterPanel() {
  */
 function renderScheduleGrid(dates) {
     const container = document.getElementById('scheduleGrid');
-    if (!container) return;
+    if (!container) {
+        console.error('scheduleGrid container not found!');
+        return;
+    }
 
     const activeJobs = jobs.filter(j => j.active);
+    console.log(`Rendering schedule with ${activeJobs.length} active jobs and ${workers.length} workers`);
 
     // Build table header with daily columns
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -775,6 +780,7 @@ function renderScheduleGrid(dates) {
     }
 
     container.innerHTML = html;
+    console.log(`Schedule rendered. HTML length: ${html.length} characters`);
 }
 
 // ============================================================================
