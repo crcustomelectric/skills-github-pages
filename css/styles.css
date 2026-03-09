@@ -365,11 +365,63 @@ header p {
     min-height: 60px;
     vertical-align: top;
     transition: background 0.2s ease;
+    position: relative;
 }
 
 .schedule-cell.drag-over {
     background: #bbdefb !important;
     border-color: var(--primary-blue);
+}
+
+/* Crew Copy Handle */
+.crew-copy-handle {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 24px;
+    height: 24px;
+    background: var(--primary-blue);
+    color: white;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: grab;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 5;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.schedule-cell:hover .crew-copy-handle {
+    opacity: 1;
+}
+
+.crew-copy-handle:hover {
+    transform: scale(1.1);
+    background: var(--light-blue);
+}
+
+.crew-copy-handle:active {
+    cursor: grabbing;
+}
+
+.schedule-cell.copying-crew {
+    background: #e3f2fd !important;
+    border: 2px solid var(--primary-blue);
+}
+
+.schedule-cell.crew-copy-target {
+    background: #c8e6c9 !important;
+    border: 2px dashed var(--primary-blue);
+    animation: pulse 0.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
 }
 
 .cell-demand-row {
@@ -483,6 +535,35 @@ header p {
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+}
+
+.job-drag-handle {
+    width: 32px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: #999;
+    cursor: grab;
+    background: linear-gradient(to right, transparent, rgba(0,0,0,0.05));
+    border-right: 2px solid var(--border-gray);
+    margin-right: 8px;
+    padding: 0 4px;
+    transition: all 0.2s ease;
+    user-select: none;
+    letter-spacing: -2px;
+}
+
+.job-drag-handle:hover {
+    color: var(--primary-blue);
+    background: linear-gradient(to right, transparent, rgba(0, 86, 160, 0.1));
+    border-right-color: var(--primary-blue);
+}
+
+.job-drag-handle:active {
+    cursor: grabbing;
+    background: linear-gradient(to right, transparent, rgba(0, 86, 160, 0.2));
 }
 
 .job-info {
@@ -644,6 +725,14 @@ header p {
     font-weight: 600;
     border-top: 3px solid var(--primary-blue);
     border-bottom: 3px solid var(--primary-blue);
+    position: sticky;
+    top: 80px; /* Position below the sticky thead (week + day headers) */
+    z-index: 9;
+}
+
+.tally-row .col-job-name {
+    background: #f0f4f8;
+    z-index: 10;
 }
 
 .tally-legend {

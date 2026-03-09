@@ -18,6 +18,11 @@ let draggingFromDate = null;
 // Drag state for job reordering
 let draggingJobId = null;
 
+// Drag state for crew copying
+let copyingCrewFromJob = null;
+let copyingCrewFromDate = null;
+let copyingCrewWorkers = [];
+
 // UI state
 let showArchivedJobs = false;
 
@@ -494,42 +499,6 @@ function renderScheduleGrid(dates) {
 
     html += `</tr></thead><tbody>`;
 
-    // Add Vacation/Time Off row (persistent)
-    html += `<tr class="vacation-row">
-        <td class="col-job-name">
-            <div class="sched-job-name">🏖️ Vacation / Time Off</div>
-            <div class="sched-job-div badge-vacation">Time Off</div>
-        </td>`;
-
-    dates.forEach(date => {
-        const dateKey = getDateKey(date);
-
-        // Find workers on vacation this day
-        const vacationWorkers = workers.filter(w => {
-            const vacKey = `${w.id}_${dateKey}`;
-            return vacationSchedule[vacKey];
-        });
-
-        html += `<td class="schedule-cell cell-vacation"
-                     ondragover="event.preventDefault(); this.classList.add('drag-over')"
-                     ondragleave="this.classList.remove('drag-over')"
-                     ondrop="dropWorkerToVacation(event, '${dateKey}')">
-            <div class="cell-workers">
-                ${vacationWorkers.map(w => `
-                    <div class="worker-chip-mini worker-chip-${w.role}"
-                         draggable="true"
-                         ondragstart="dragWorkerStart(event, ${w.id}, 'vacation', '${dateKey}')"
-                         title="${w.name} - Time Off">
-                        <span class="chip-name-mini">${w.name.split(' ')[0]}</span>
-                        <button class="chip-remove" onclick="removeVacation(${w.id}, '${dateKey}'); event.stopPropagation()">×</button>
-                    </div>
-                `).join('')}
-            </div>
-        </td>`;
-    });
-
-    html += `</tr>`;
-
     // Add worker availability tally row with progress bars
     html += `<tr class="tally-row">
         <td class="col-job-name">
@@ -595,6 +564,42 @@ function renderScheduleGrid(dates) {
 
     html += `</tr>`;
 
+    // Add Vacation/Time Off row (after tally row)
+    html += `<tr class="vacation-row">
+        <td class="col-job-name">
+            <div class="sched-job-name">🏖️ Vacation / Time Off</div>
+            <div class="sched-job-div badge-vacation">Time Off</div>
+        </td>`;
+
+    dates.forEach(date => {
+        const dateKey = getDateKey(date);
+
+        // Find workers on vacation this day
+        const vacationWorkers = workers.filter(w => {
+            const vacKey = `${w.id}_${dateKey}`;
+            return vacationSchedule[vacKey];
+        });
+
+        html += `<td class="schedule-cell cell-vacation"
+                     ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                     ondragleave="this.classList.remove('drag-over')"
+                     ondrop="dropWorkerToVacation(event, '${dateKey}')">
+            <div class="cell-workers">
+                ${vacationWorkers.map(w => `
+                    <div class="worker-chip-mini worker-chip-${w.role}"
+                         draggable="true"
+                         ondragstart="dragWorkerStart(event, ${w.id}, 'vacation', '${dateKey}')"
+                         title="${w.name} - Time Off">
+                        <span class="chip-name-mini">${w.name.split(' ')[0]}</span>
+                        <button class="chip-remove" onclick="removeVacation(${w.id}, '${dateKey}'); event.stopPropagation()">×</button>
+                    </div>
+                `).join('')}
+            </div>
+        </td>`;
+    });
+
+    html += `</tr>`;
+
     if (activeJobs.length === 0) {
         html += `<tr><td colspan="19" class="schedule-empty-row">No active jobs. Click "+ Add Job" to get started.</td></tr>`;
     } else {
@@ -607,6 +612,12 @@ function renderScheduleGrid(dates) {
                          ondragend="dragJobEnd(event)">
                 <td class="col-job-name job-name-cell">
                     <div class="job-info-wrapper">
+                        <div class="job-drag-handle"
+                             draggable="true"
+                             ondragstart="dragJobStart(event, ${job.id})"
+                             title="Drag to reorder">
+                            ⋮⋮
+                        </div>
                         <div class="job-info">
                             <div class="sched-job-name">${job.name}</div>
                             <div class="sched-job-div badge-${job.division}">${job.division}</div>
@@ -638,9 +649,11 @@ function renderScheduleGrid(dates) {
                 const assignedWorkers = assigned.map(id => workers.find(w => w.id === id)).filter(Boolean);
 
                 html += `<td class="schedule-cell ${statusClass}"
-                             ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                             data-job-id="${job.id}"
+                             data-date-key="${dateKey}"
+                             ondragover="handleCellDragOver(event, ${job.id}, '${dateKey}')"
                              ondragleave="this.classList.remove('drag-over')"
-                             ondrop="dropWorkerToCell(event, ${job.id}, '${dateKey}')">
+                             ondrop="handleCellDrop(event, ${job.id}, '${dateKey}')">
                     <div class="cell-demand-row">
                         <input type="number" class="demand-input" value="${demand}" min="0" max="9"
                                onchange="setDemand(${job.id}, '${dateKey}', this.value)"
@@ -659,6 +672,15 @@ function renderScheduleGrid(dates) {
                             </div>
                         `).join('')}
                     </div>
+                    ${assignedWorkers.length > 0 ? `
+                        <div class="crew-copy-handle"
+                             draggable="true"
+                             ondragstart="startCrewCopy(event, ${job.id}, '${dateKey}')"
+                             ondragend="endCrewCopy(event)"
+                             title="Drag to copy crew across days ⇒">
+                            ⇒
+                        </div>
+                    ` : ''}
                 </td>`;
             });
 
@@ -893,6 +915,98 @@ function removeScheduleWorker(jobId, dateKey, workerId) {
         saveData();
         renderSchedule();
     }
+}
+
+// ============================================================================
+// Crew Copy Handlers
+// ============================================================================
+
+/**
+ * Start crew copy operation (drag handle)
+ */
+function startCrewCopy(event, jobId, dateKey) {
+    event.stopPropagation();
+
+    const slotKey = `${jobId}_${dateKey}`;
+    const slot = dailySchedule[slotKey];
+
+    if (!slot || !slot.assigned || slot.assigned.length === 0) return;
+
+    copyingCrewFromJob = jobId;
+    copyingCrewFromDate = dateKey;
+    copyingCrewWorkers = [...slot.assigned]; // Copy array
+
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData('text/plain', 'crew-copy');
+
+    // Visual feedback
+    event.target.closest('.schedule-cell').classList.add('copying-crew');
+}
+
+/**
+ * Handle drag over for both worker drops and crew copy
+ */
+function handleCellDragOver(event, jobId, dateKey) {
+    event.preventDefault();
+
+    // Check if we're in crew copy mode
+    if (copyingCrewFromJob !== null) {
+        // Only allow dropping on same job
+        if (jobId === copyingCrewFromJob) {
+            event.dataTransfer.dropEffect = 'copy';
+            event.target.closest('.schedule-cell')?.classList.add('crew-copy-target');
+        } else {
+            event.dataTransfer.dropEffect = 'none';
+        }
+    } else {
+        // Normal worker drag
+        event.dataTransfer.dropEffect = 'move';
+        event.target.closest('.schedule-cell')?.classList.add('drag-over');
+    }
+}
+
+/**
+ * Handle drop for both worker drops and crew copy
+ */
+function handleCellDrop(event, jobId, dateKey) {
+    event.preventDefault();
+    const cell = event.target.closest('.schedule-cell');
+    cell?.classList.remove('drag-over', 'crew-copy-target');
+
+    // Check if we're in crew copy mode
+    if (copyingCrewFromJob !== null && copyingCrewFromJob === jobId) {
+        // Crew copy mode - copy all workers from source to target
+        const slotKey = `${jobId}_${dateKey}`;
+        if (!dailySchedule[slotKey]) dailySchedule[slotKey] = { demand: 0, assigned: [] };
+        if (!Array.isArray(dailySchedule[slotKey].assigned)) dailySchedule[slotKey].assigned = [];
+
+        // Copy workers (avoiding duplicates)
+        copyingCrewWorkers.forEach(workerId => {
+            if (!dailySchedule[slotKey].assigned.includes(workerId)) {
+                dailySchedule[slotKey].assigned.push(workerId);
+            }
+        });
+
+        saveData();
+        renderSchedule();
+    } else if (draggingWorkerId) {
+        // Normal worker drop
+        dropWorkerToCell(event, jobId, dateKey);
+    }
+}
+
+/**
+ * End crew copy operation
+ */
+function endCrewCopy(event) {
+    // Clean up crew copy state
+    document.querySelectorAll('.copying-crew, .crew-copy-target').forEach(el => {
+        el.classList.remove('copying-crew', 'crew-copy-target');
+    });
+
+    copyingCrewFromJob = null;
+    copyingCrewFromDate = null;
+    copyingCrewWorkers = [];
 }
 
 // ============================================================================
