@@ -25,6 +25,11 @@ let copyingCrewWorkers = [];
 
 // UI state
 let showArchivedJobs = false;
+let isMobileView = false; // Auto-detected based on screen width
+let currentDayOffset = 0; // Day offset from today for mobile single-day view
+let longPressTimer = null; // Timer for long-press detection
+let touchStartX = 0; // For swipe detection
+let touchStartY = 0;
 
 // ============================================================================
 // Modal Functions
@@ -145,6 +150,154 @@ function closeEditJobModal() {
     editingJobId = null;
     document.getElementById('editJobModal').classList.remove('active');
     document.getElementById('editJobForm').reset();
+}
+
+/**
+ * Mobile assignment modals
+ */
+function showAssignWorkerModal(workerId, dateKey) {
+    if (!isMobileView) return;
+
+    const worker = workers.find(w => w.id === workerId);
+    if (!worker) return;
+
+    const activeJobs = jobs.filter(j => !j.archived);
+    const jobsWithSlots = activeJobs.map(job => {
+        const slotKey = `${job.id}_${dateKey}`;
+        const slot = dailySchedule[slotKey] || { demand: 0, assigned: [] };
+        return { ...job, slot };
+    });
+
+    showConfirmModal(
+        `Assign ${worker.name}`,
+        `Where should ${worker.name} work today?`,
+        () => {} // Will be replaced with job selection
+    );
+
+    // Replace modal content with job list
+    const modalMessage = document.getElementById('confirmModalMessage');
+    if (modalMessage) {
+        modalMessage.innerHTML = `
+            <div class="assign-modal-jobs">
+                ${jobsWithSlots.map(job => `
+                    <button class="assign-job-btn" onclick="assignWorkerToJob(${workerId}, ${job.id}, '${dateKey}')">
+                        <div class="assign-job-name">${job.name}</div>
+                        <div class="assign-job-stats">Need: ${job.slot.demand || 0} | Got: ${job.slot.assigned.length}</div>
+                    </button>
+                `).join('')}
+                <button class="assign-job-btn assign-vacation-btn" onclick="addVacation(${workerId}, '${dateKey}')">
+                    🏖️ Mark as Vacation
+                </button>
+            </div>
+        `;
+    }
+}
+
+function showAssignToJobModal(jobId, dateKey) {
+    if (!isMobileView) return;
+
+    const job = jobs.find(j => j.id === jobId);
+    if (!job) return;
+
+    const slotKey = `${jobId}_${dateKey}`;
+    const slot = dailySchedule[slotKey] || { demand: 0, assigned: [] };
+    const assignedIds = slot.assigned || [];
+
+    const availableWorkers = workers.filter(w => {
+        if (w.archived) return false;
+        if (assignedIds.includes(w.id)) return false;
+
+        // Check if scheduled elsewhere
+        const isScheduled = Object.keys(dailySchedule).some(key => {
+            if (key.includes(dateKey) && !key.startsWith(`${jobId}_`)) {
+                const otherSlot = dailySchedule[key];
+                return otherSlot && otherSlot.assigned && otherSlot.assigned.includes(w.id);
+            }
+            return false;
+        });
+
+        const vacKey = `${w.id}_${dateKey}`;
+        const isOnVacation = vacationSchedule[vacKey];
+
+        return !isScheduled && !isOnVacation;
+    });
+
+    showConfirmModal(
+        `Assign to ${job.name}`,
+        availableWorkers.length > 0 ? 'Select a worker:' : 'No workers available',
+        () => {}
+    );
+
+    // Replace modal content with worker list
+    const modalMessage = document.getElementById('confirmModalMessage');
+    if (modalMessage) {
+        if (availableWorkers.length > 0) {
+            modalMessage.innerHTML = `
+                <div class="assign-modal-workers">
+                    ${availableWorkers.map(w => `
+                        <button class="assign-worker-btn assign-worker-${w.role}" onclick="assignWorkerToJob(${w.id}, ${jobId}, '${dateKey}')">
+                            <div class="assign-worker-icon">👷</div>
+                            <div class="assign-worker-info">
+                                <div class="assign-worker-name">${w.name}</div>
+                                <div class="assign-worker-role">${w.role}</div>
+                            </div>
+                        </button>
+                    `).join('')}
+                </div>
+            `;
+        } else {
+            modalMessage.innerHTML = '<p>All workers are either assigned to other jobs or on vacation.</p>';
+        }
+    }
+}
+
+function assignWorkerToJob(workerId, jobId, dateKey) {
+    const slotKey = `${jobId}_${dateKey}`;
+    if (!dailySchedule[slotKey]) {
+        dailySchedule[slotKey] = { demand: 0, assigned: [] };
+    }
+    if (!dailySchedule[slotKey].assigned.includes(workerId)) {
+        dailySchedule[slotKey].assigned.push(workerId);
+        saveData();
+        renderSchedule();
+    }
+    closeConfirmModal();
+}
+
+function addVacation(workerId, dateKey) {
+    const vacKey = `${workerId}_${dateKey}`;
+    vacationSchedule[vacKey] = true;
+    saveData();
+    renderSchedule();
+    closeConfirmModal();
+}
+
+function showJobMenu(jobId, dateKey) {
+    const job = jobs.find(j => j.id === jobId);
+    if (!job) return;
+
+    showConfirmModal(
+        job.name,
+        'Choose an action:',
+        () => {}
+    );
+
+    const modalMessage = document.getElementById('confirmModalMessage');
+    if (modalMessage) {
+        modalMessage.innerHTML = `
+            <div class="job-menu-actions">
+                <button class="menu-action-btn" onclick="editJob(${jobId}); closeConfirmModal();">
+                    ✏️ Edit Job
+                </button>
+                <button class="menu-action-btn" onclick="archiveJob(${jobId}); closeConfirmModal();">
+                    📦 Archive Job
+                </button>
+                <button class="menu-action-btn menu-action-danger" onclick="removeJob(${jobId}); closeConfirmModal();">
+                    🗑️ Delete Job
+                </button>
+            </div>
+        `;
+    }
 }
 
 /**
@@ -404,6 +557,17 @@ function shiftScheduleWeek(delta) {
  * Main schedule rendering function
  */
 function renderSchedule() {
+    if (isMobileView) {
+        renderMobileSchedule();
+    } else {
+        renderDesktopSchedule();
+    }
+}
+
+/**
+ * Desktop 3-week schedule view
+ */
+function renderDesktopSchedule() {
     // Generate all dates for 3 weeks (Mon-Sat)
     const dates = [];
     for (let week = 0; week < 3; week++) {
@@ -423,6 +587,42 @@ function renderSchedule() {
 
     renderRosterPanel();
     renderScheduleGrid(dates);
+}
+
+/**
+ * Mobile single-day card view
+ */
+function renderMobileSchedule() {
+    const targetDate = getMobileDay();
+    const dateKey = getDateKey(targetDate);
+
+    // Format date for display
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const dayName = dayNames[targetDate.getDay()];
+    const monthName = monthNames[targetDate.getMonth()];
+    const dayNum = targetDate.getDate();
+
+    // Determine if this is today, tomorrow, etc.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((targetDate - today) / (1000 * 60 * 60 * 24));
+    let dayLabel = '';
+    if (diffDays === 0) dayLabel = ' (Today)';
+    else if (diffDays === 1) dayLabel = ' (Tomorrow)';
+    else if (diffDays === -1) dayLabel = ' (Yesterday)';
+
+    // Update header
+    const label = document.getElementById('scheduleWeekRange');
+    if (label) {
+        label.innerHTML = `${dayName}, ${monthName} ${dayNum}${dayLabel}`;
+    }
+
+    // Render mobile roster
+    renderMobileRoster(targetDate, dateKey);
+
+    // Render mobile job cards
+    renderMobileJobCards(targetDate, dateKey);
 }
 
 /**
@@ -784,6 +984,234 @@ function renderScheduleGrid(dates) {
 }
 
 // ============================================================================
+// Mobile View Rendering
+// ============================================================================
+
+/**
+ * Render mobile roster (collapsible)
+ */
+function renderMobileRoster(targetDate, dateKey) {
+    const container = document.getElementById('scheduleRoster');
+    if (!container) return;
+
+    const divisionFilter = document.getElementById('rosterDivisionFilter')?.value || 'all';
+    let filtered = workers.filter(w => {
+        if (w.archived) return false;
+        if (divisionFilter === 'all') return true;
+        return w.division === divisionFilter || w.division === 'both';
+    });
+
+    // Check if each worker is scheduled today
+    const workersWithStatus = filtered.map(w => {
+        const isScheduled = Object.keys(dailySchedule).some(key => {
+            if (key.includes(dateKey)) {
+                const slot = dailySchedule[key];
+                return slot && slot.assigned && slot.assigned.includes(w.id);
+            }
+            return false;
+        });
+        const vacKey = `${w.id}_${dateKey}`;
+        const isOnVacation = vacationSchedule[vacKey];
+
+        return { ...w, isScheduled, isOnVacation };
+    });
+
+    const available = workersWithStatus.filter(w => !w.isScheduled && !w.isOnVacation);
+    const scheduled = workersWithStatus.filter(w => w.isScheduled);
+    const onVacation = workersWithStatus.filter(w => w.isOnVacation);
+
+    container.innerHTML = `
+        <div class="mobile-roster">
+            <div class="roster-header-mobile">
+                <h3>Team Roster <span class="badge-count">${workers.length}</span></h3>
+                <select id="rosterDivisionFilter" onchange="renderSchedule()">
+                    <option value="all">All</option>
+                    <option value="commercial">Commercial</option>
+                    <option value="residential">Residential</option>
+                </select>
+            </div>
+
+            ${available.length > 0 ? `
+                <div class="mobile-roster-section">
+                    <h4>✅ Available (${available.length})</h4>
+                    <div class="mobile-worker-list">
+                        ${available.map(w => `
+                            <div class="mobile-worker-chip mobile-worker-chip-${w.role}"
+                                 data-worker-id="${w.id}"
+                                 onclick="showAssignWorkerModal(${w.id}, '${dateKey}')">
+                                <div class="worker-icon">👷</div>
+                                <div class="worker-info">
+                                    <div class="worker-name">${w.name}</div>
+                                    <div class="worker-role">${w.role}</div>
+                                </div>
+                                <div class="worker-action">+</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
+            ${scheduled.length > 0 ? `
+                <div class="mobile-roster-section">
+                    <h4>🔧 Scheduled (${scheduled.length})</h4>
+                    <div class="mobile-worker-list">
+                        ${scheduled.map(w => `
+                            <div class="mobile-worker-chip mobile-worker-chip-scheduled">
+                                <div class="worker-icon">👷</div>
+                                <div class="worker-info">
+                                    <div class="worker-name">${w.name}</div>
+                                    <div class="worker-role">${w.role}</div>
+                                </div>
+                                <div class="worker-status">Assigned</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+
+            ${onVacation.length > 0 ? `
+                <div class="mobile-roster-section">
+                    <h4>🏖️ On Vacation (${onVacation.length})</h4>
+                    <div class="mobile-worker-list">
+                        ${onVacation.map(w => `
+                            <div class="mobile-worker-chip mobile-worker-chip-vacation">
+                                <div class="worker-icon">🏖️</div>
+                                <div class="worker-info">
+                                    <div class="worker-name">${w.name}</div>
+                                    <div class="worker-role">${w.role}</div>
+                                </div>
+                                <button class="worker-action-btn" onclick="removeVacation(${w.id}, '${dateKey}'); event.stopPropagation();">×</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+    `;
+
+    // Restore filter value
+    if (divisionFilter !== 'all') {
+        const filterSelect = document.getElementById('rosterDivisionFilter');
+        if (filterSelect) filterSelect.value = divisionFilter;
+    }
+}
+
+/**
+ * Render mobile job cards for the day
+ */
+function renderMobileJobCards(targetDate, dateKey) {
+    const container = document.getElementById('scheduleGrid');
+    if (!container) return;
+
+    const activeJobs = jobs.filter(j => !j.archived);
+
+    // Get jobs that have work scheduled for this day
+    const jobsForDay = activeJobs.map(job => {
+        const slotKey = `${job.id}_${dateKey}`;
+        const slot = dailySchedule[slotKey] || { demand: 0, assigned: [] };
+        const assignedWorkers = (slot.assigned || []).map(wId => workers.find(w => w.id === wId)).filter(Boolean);
+
+        return { ...job, slot, assignedWorkers };
+    });
+
+    if (jobsForDay.length === 0) {
+        container.innerHTML = `
+            <div class="mobile-no-jobs">
+                <p>No jobs available.</p>
+                <button class="btn-primary" onclick="showAddJobModal()">+ Add Job</button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="mobile-job-list">
+            ${jobsForDay.map(job => {
+                const needed = job.slot.demand || 0;
+                const assigned = job.assignedWorkers.length;
+                const isFull = needed > 0 && assigned >= needed;
+                const isEmpty = needed > 0 && assigned === 0;
+                const isShort = needed > 0 && assigned > 0 && assigned < needed;
+                const isOver = assigned > needed && needed > 0;
+
+                let statusClass = 'status-none';
+                let statusText = 'No crew needed';
+                if (isEmpty) {
+                    statusClass = 'status-empty';
+                    statusText = '⚠️ Needs crew';
+                } else if (isShort) {
+                    statusClass = 'status-short';
+                    statusText = `📋 ${assigned}/${needed} staffed`;
+                } else if (isFull) {
+                    statusClass = 'status-full';
+                    statusText = '✅ Fully staffed';
+                } else if (isOver) {
+                    statusClass = 'status-over';
+                    statusText = `📊 Overstaffed (${assigned}/${needed})`;
+                }
+
+                return `
+                    <div class="mobile-job-card ${statusClass}">
+                        <div class="job-card-header">
+                            <div class="job-card-title">
+                                <h3>${job.name}</h3>
+                                <span class="badge badge-${job.division}">${job.division}</span>
+                            </div>
+                            <button class="job-menu-btn" onclick="showJobMenu(${job.id}, '${dateKey}')">⋮</button>
+                        </div>
+
+                        ${job.location ? `<div class="job-card-location">📍 ${job.location}</div>` : ''}
+
+                        <div class="job-card-stats">
+                            <div class="stat-box">
+                                <span class="stat-label">Need</span>
+                                <input type="number"
+                                       class="stat-value stat-input"
+                                       value="${needed}"
+                                       min="0"
+                                       onchange="setDemand(${job.id}, '${dateKey}', this.value)"
+                                       onclick="event.stopPropagation()">
+                            </div>
+                            <div class="stat-box">
+                                <span class="stat-label">Got</span>
+                                <span class="stat-value">${assigned}</span>
+                            </div>
+                        </div>
+
+                        <div class="job-card-status ${statusClass}">
+                            ${statusText}
+                        </div>
+
+                        ${job.assignedWorkers.length > 0 ? `
+                            <div class="job-card-crew">
+                                <h4>Assigned Crew:</h4>
+                                <div class="crew-list">
+                                    ${job.assignedWorkers.map(w => `
+                                        <div class="crew-member crew-member-${w.role}">
+                                            <div class="crew-icon">👷</div>
+                                            <div class="crew-info">
+                                                <span class="crew-name">${w.name}</span>
+                                                <span class="crew-role">${w.role}</span>
+                                            </div>
+                                            <button class="crew-remove-btn"
+                                                    onclick="removeScheduleWorker(${job.id}, '${dateKey}', ${w.id}); event.stopPropagation();">×</button>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : '<div class="job-card-empty">No crew assigned yet</div>'}
+
+                        <button class="job-assign-btn" onclick="showAssignToJobModal(${job.id}, '${dateKey}')">
+                            + Assign Worker
+                        </button>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+// ============================================================================
 // Drag & Drop Handlers
 // ============================================================================
 
@@ -1140,6 +1568,105 @@ function initializeData() {
 }
 
 // ============================================================================
+// Mobile Detection and Helpers
+// ============================================================================
+
+/**
+ * Detect if we should use mobile view based on screen width
+ */
+function detectMobileView() {
+    const wasMobile = isMobileView;
+    isMobileView = window.innerWidth < 768;
+
+    // If view mode changed, re-render
+    if (wasMobile !== isMobileView) {
+        renderSchedule();
+    }
+}
+
+/**
+ * Get single day for mobile view
+ */
+function getMobileDay() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() + currentDayOffset);
+    return targetDate;
+}
+
+/**
+ * Shift mobile day view
+ */
+function shiftMobileDay(delta) {
+    currentDayOffset += delta;
+    renderSchedule();
+}
+
+/**
+ * Jump to today in mobile view
+ */
+function jumpToToday() {
+    currentDayOffset = 0;
+    renderSchedule();
+}
+
+/**
+ * Smart navigation functions (desktop week or mobile day)
+ */
+function navigatePrev() {
+    if (isMobileView) {
+        shiftMobileDay(-1);
+    } else {
+        shiftScheduleWeek(-1);
+    }
+}
+
+function navigateNext() {
+    if (isMobileView) {
+        shiftMobileDay(1);
+    } else {
+        shiftScheduleWeek(1);
+    }
+}
+
+// ============================================================================
+// Touch Gesture Handlers
+// ============================================================================
+
+/**
+ * Handle touch start for swipe detection
+ */
+function handleTouchStart(event) {
+    touchStartX = event.touches[0].clientX;
+    touchStartY = event.touches[0].clientY;
+}
+
+/**
+ * Handle touch end for swipe detection (day navigation)
+ */
+function handleTouchEnd(event) {
+    if (!isMobileView) return;
+
+    const touchEndX = event.changedTouches[0].clientX;
+    const touchEndY = event.changedTouches[0].clientY;
+
+    const deltaX = touchEndX - touchStartX;
+    const deltaY = touchEndY - touchStartY;
+
+    // Only trigger swipe if horizontal movement is greater than vertical
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+        if (deltaX > 0) {
+            // Swipe right - previous day
+            shiftMobileDay(-1);
+        } else {
+            // Swipe left - next day
+            shiftMobileDay(1);
+        }
+    }
+}
+
+// ============================================================================
 // Initialize on page load
 // ============================================================================
 
@@ -1148,6 +1675,16 @@ document.addEventListener('DOMContentLoaded', function() {
     if (typeof firebase !== 'undefined' && typeof initializeFirebase === 'function') {
         initializeFirebase();
     }
+
+    // Detect mobile view
+    detectMobileView();
+
+    // Add resize listener
+    window.addEventListener('resize', detectMobileView);
+
+    // Add touch gesture listeners for swipe navigation
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
 
     // Then load data
     initializeData();
