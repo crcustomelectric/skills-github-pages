@@ -35,9 +35,9 @@
         <div class="main-content">
             <div class="schedule-wrapper">
                 <div class="schedule-nav">
-                    <button class="schedule-nav-btn" onclick="shiftScheduleWeek(-1)">&#8249; Prev</button>
-                    <span class="schedule-week-range" id="scheduleWeekRange">Loading...</span>
-                    <button class="schedule-nav-btn" onclick="shiftScheduleWeek(1)">Next &#8250;</button>
+                    <button class="schedule-nav-btn" onclick="navigatePrev()">&#8249; Prev</button>
+                    <span class="schedule-week-range" id="scheduleWeekRange" onclick="isMobileView && jumpToToday()">Loading...</span>
+                    <button class="schedule-nav-btn" onclick="navigateNext()">Next &#8250;</button>
                 </div>
                 <div class="schedule-body">
                     <!-- Team Roster -->
