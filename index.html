@@ -28,7 +28,7 @@
             <div class="header-actions">
                 <button class="add-btn" onclick="showAddWorkerModal()">+ Add Worker</button>
                 <button class="add-btn" onclick="showAddJobModal()">+ Add Job</button>
-                <button class="add-btn" onclick="window.print()" title="Print schedule">🖨️ Print</button>
+                <button class="add-btn" onclick="showPrintModal()" title="Print schedule">🖨️ Print</button>
             </div>
         </header>
 
@@ -193,6 +193,53 @@
                     <button type="submit" class="btn-primary">Save Changes</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Print Selection Modal -->
+    <div class="modal" id="printModal">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h2>Print Schedule</h2>
+                <button class="close-btn" onclick="closePrintModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p>Select which week to print:</p>
+                <div class="print-week-options">
+                    <label class="print-week-option">
+                        <input type="radio" name="printWeek" value="0" checked>
+                        <div class="option-content">
+                            <strong>Current Week</strong>
+                            <span class="option-date" id="printWeek0Date">Loading...</span>
+                        </div>
+                    </label>
+                    <label class="print-week-option">
+                        <input type="radio" name="printWeek" value="1">
+                        <div class="option-content">
+                            <strong>Next Week</strong>
+                            <span class="option-date" id="printWeek1Date">Loading...</span>
+                        </div>
+                    </label>
+                    <label class="print-week-option">
+                        <input type="radio" name="printWeek" value="2">
+                        <div class="option-content">
+                            <strong>2 Weeks Ahead</strong>
+                            <span class="option-date" id="printWeek2Date">Loading...</span>
+                        </div>
+                    </label>
+                    <label class="print-week-option">
+                        <input type="radio" name="printWeek" value="3">
+                        <div class="option-content">
+                            <strong>3 Weeks Ahead</strong>
+                            <span class="option-date" id="printWeek3Date">Loading...</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" onclick="closePrintModal()">Cancel</button>
+                <button type="button" class="btn-primary" onclick="printSelectedWeek()">🖨️ Print</button>
+            </div>
         </div>
     </div>
 

@@ -310,6 +310,7 @@ document.addEventListener('keydown', function(e) {
         closeConfirmModal();
         closePromptModal();
         closeEditJobModal();
+        closePrintModal();
     }
 });
 
@@ -1572,6 +1573,238 @@ function initializeData() {
 // ============================================================================
 
 /**
+ * Show print modal with week options
+ */
+function showPrintModal() {
+    const modal = document.getElementById('printModal');
+    if (!modal) return;
+
+    // Populate week date ranges
+    for (let i = 0; i < 4; i++) {
+        const weekOffset = scheduleWeekOffset + i;
+        const monday = getWeekMonday(weekOffset);
+        const saturday = new Date(monday);
+        saturday.setDate(monday.getDate() + 5);
+
+        const dateStr = `${formatDateShort(monday)} – ${formatDateShort(saturday)}`;
+        const dateElement = document.getElementById(`printWeek${i}Date`);
+        if (dateElement) {
+            dateElement.textContent = dateStr;
+        }
+    }
+
+    // Default to current week (scheduleWeekOffset)
+    const radioButtons = document.querySelectorAll('input[name="printWeek"]');
+    radioButtons.forEach((radio, index) => {
+        radio.value = String(scheduleWeekOffset + index);
+        radio.checked = (index === 0);
+    });
+
+    modal.classList.add('active');
+}
+
+/**
+ * Close print modal
+ */
+function closePrintModal() {
+    document.getElementById('printModal')?.classList.remove('active');
+}
+
+/**
+ * Print the selected week
+ */
+function printSelectedWeek() {
+    const selectedRadio = document.querySelector('input[name="printWeek"]:checked');
+    if (!selectedRadio) return;
+
+    const weekOffset = parseInt(selectedRadio.value);
+
+    // Generate print layout
+    generateForemanPrintLayout(weekOffset);
+
+    // Close modal
+    closePrintModal();
+
+    // Trigger print after a short delay to allow rendering
+    setTimeout(() => {
+        window.print();
+    }, 100);
+}
+
+/**
+ * Generate foreman-style print layout for a specific week
+ */
+function generateForemanPrintLayout(weekOffset) {
+    const monday = getWeekMonday(weekOffset);
+    const dates = [];
+    const dayNames = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+    // Generate Mon-Sat for this week
+    for (let i = 0; i < 6; i++) {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + i);
+        dates.push(date);
+    }
+
+    // Get all workers and jobs
+    const activeWorkers = workers.filter(w => !w.archived);
+    const activeJobs = jobs.filter(j => !j.archived);
+
+    // Build worker rows
+    let workerRows = '';
+    activeWorkers.forEach(worker => {
+        const roleSymbol = worker.isForeman ? ' ★' : '';
+        const roleName = worker.role.charAt(0).toUpperCase() + worker.role.slice(1);
+
+        workerRows += `
+            <tr class="print-worker-row">
+                <td class="print-worker-name">
+                    <strong>${worker.name}</strong><br>
+                    <span class="print-role">${roleName}${roleSymbol}</span>
+                </td>`;
+
+        dates.forEach(date => {
+            const dateKey = getDateKey(date);
+            const vacKey = `${worker.id}_${dateKey}`;
+            const isOnVacation = vacationSchedule[vacKey];
+
+            if (isOnVacation) {
+                workerRows += `<td class="print-cell print-vacation">VACATION</td>`;
+                return;
+            }
+
+            // Find which job this worker is assigned to
+            let assignedJob = null;
+            let crewSize = 0;
+
+            activeJobs.forEach(job => {
+                const slotKey = `${job.id}_${dateKey}`;
+                const slot = dailySchedule[slotKey];
+                if (slot && slot.assigned && slot.assigned.includes(worker.id)) {
+                    assignedJob = job;
+                    crewSize = slot.demand || 0;
+                }
+            });
+
+            if (assignedJob) {
+                workerRows += `
+                    <td class="print-cell print-assigned">
+                        <div class="print-job-name">${assignedJob.name}</div>
+                        <div class="print-crew-size">${crewSize} crew</div>
+                    </td>`;
+            } else {
+                workerRows += `<td class="print-cell print-off">OFF</td>`;
+            }
+        });
+
+        workerRows += `</tr>`;
+    });
+
+    // Build job details section
+    let jobDetails = '';
+    activeJobs.forEach(job => {
+        const divisionLabel = job.division.charAt(0).toUpperCase() + job.division.slice(1);
+
+        // Get crew needs for the week
+        let weekNeeds = [];
+        let assignedWorkers = [];
+
+        dates.forEach((date, idx) => {
+            const dateKey = getDateKey(date);
+            const slotKey = `${job.id}_${dateKey}`;
+            const slot = dailySchedule[slotKey];
+            const demand = slot?.demand || 0;
+            const assigned = slot?.assigned || [];
+
+            weekNeeds.push(`${dayNames[idx]}(${demand})`);
+
+            assigned.forEach(wId => {
+                const worker = workers.find(w => w.id === wId);
+                if (worker && !assignedWorkers.includes(worker.name)) {
+                    assignedWorkers.push(worker.name);
+                }
+            });
+        });
+
+        jobDetails += `
+            <div class="print-job-detail">
+                <div class="print-job-header">
+                    <strong>${job.name.toUpperCase()}</strong> - ${divisionLabel}
+                </div>
+                ${job.location ? `<div class="print-job-location">${job.location}</div>` : ''}
+                <div class="print-job-info">
+                    <div>Crew needed: ${weekNeeds.join(', ')}</div>
+                    ${assignedWorkers.length > 0 ? `<div>Assigned: ${assignedWorkers.join(', ')}</div>` : ''}
+                </div>
+            </div>`;
+    });
+
+    // Create print container
+    const printDate = new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+
+    const weekRange = `${formatDateShort(dates[0])} – ${formatDateShort(dates[5])}`;
+
+    const printHTML = `
+        <div id="foremanPrintLayout" class="foreman-print-container">
+            <div class="print-header">
+                <div class="print-title">
+                    <h1>CR CUSTOM ELECTRIC - WEEKLY CREW ASSIGNMENTS</h1>
+                    <h2>Week of ${weekRange}</h2>
+                </div>
+                <div class="print-date">Printed: ${printDate}</div>
+            </div>
+
+            <table class="print-schedule-table">
+                <thead>
+                    <tr>
+                        <th class="print-worker-col">WORKER</th>
+                        ${dates.map((d, i) => `
+                            <th class="print-day-col">
+                                <div>${dayNames[i]}</div>
+                                <div class="print-date-num">${d.getMonth() + 1}/${d.getDate()}</div>
+                            </th>
+                        `).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${workerRows}
+                </tbody>
+            </table>
+
+            <div class="print-job-details">
+                <h3>JOB DETAILS</h3>
+                ${jobDetails}
+            </div>
+
+            <div class="print-notes">
+                <h3>NOTES:</h3>
+                <div class="print-notes-lines">
+                    <div class="print-notes-line"></div>
+                    <div class="print-notes-line"></div>
+                    <div class="print-notes-line"></div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Remove any existing print layout
+    const existingLayout = document.getElementById('foremanPrintLayout');
+    if (existingLayout) {
+        existingLayout.remove();
+    }
+
+    // Add new print layout to body
+    document.body.insertAdjacentHTML('beforeend', printHTML);
+}
+
+/**
  * Prepare the page for printing with current date
  */
 window.addEventListener('beforeprint', function() {
@@ -1601,9 +1834,16 @@ window.addEventListener('beforeprint', function() {
 });
 
 /**
- * Restore mobile view after printing
+ * Restore mobile view after printing and cleanup
  */
 window.addEventListener('afterprint', function() {
+    // Remove print layout
+    const printLayout = document.getElementById('foremanPrintLayout');
+    if (printLayout) {
+        printLayout.remove();
+    }
+
+    // Restore mobile view if needed
     if (window._wasMobileBeforePrint) {
         isMobileView = true;
         renderSchedule();
