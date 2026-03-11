@@ -1653,15 +1653,9 @@ function generateForemanPrintLayout(weekOffset) {
     // Build worker rows
     let workerRows = '';
     activeWorkers.forEach(worker => {
-        const roleSymbol = worker.isForeman ? ' ★' : '';
-        const roleName = worker.role.charAt(0).toUpperCase() + worker.role.slice(1);
-
         workerRows += `
             <tr class="print-worker-row">
-                <td class="print-worker-name">
-                    <strong>${worker.name}</strong><br>
-                    <span class="print-role">${roleName}${roleSymbol}</span>
-                </td>`;
+                <td class="print-worker-name">${worker.name}</td>`;
 
         dates.forEach(date => {
             const dateKey = getDateKey(date);
@@ -1700,45 +1694,6 @@ function generateForemanPrintLayout(weekOffset) {
         workerRows += `</tr>`;
     });
 
-    // Build job details section
-    let jobDetails = '';
-    activeJobs.forEach(job => {
-        const divisionLabel = job.division.charAt(0).toUpperCase() + job.division.slice(1);
-
-        // Get crew needs for the week
-        let weekNeeds = [];
-        let assignedWorkers = [];
-
-        dates.forEach((date, idx) => {
-            const dateKey = getDateKey(date);
-            const slotKey = `${job.id}_${dateKey}`;
-            const slot = dailySchedule[slotKey];
-            const demand = slot?.demand || 0;
-            const assigned = slot?.assigned || [];
-
-            weekNeeds.push(`${dayNames[idx]}(${demand})`);
-
-            assigned.forEach(wId => {
-                const worker = workers.find(w => w.id === wId);
-                if (worker && !assignedWorkers.includes(worker.name)) {
-                    assignedWorkers.push(worker.name);
-                }
-            });
-        });
-
-        jobDetails += `
-            <div class="print-job-detail">
-                <div class="print-job-header">
-                    <strong>${job.name.toUpperCase()}</strong> - ${divisionLabel}
-                </div>
-                ${job.location ? `<div class="print-job-location">${job.location}</div>` : ''}
-                <div class="print-job-info">
-                    <div>Crew needed: ${weekNeeds.join(', ')}</div>
-                    ${assignedWorkers.length > 0 ? `<div>Assigned: ${assignedWorkers.join(', ')}</div>` : ''}
-                </div>
-            </div>`;
-    });
-
     // Create print container
     const printDate = new Date().toLocaleDateString('en-US', {
         weekday: 'long',
@@ -1764,7 +1719,7 @@ function generateForemanPrintLayout(weekOffset) {
             <table class="print-schedule-table">
                 <thead>
                     <tr>
-                        <th class="print-worker-col">WORKER</th>
+                        <th class="print-worker-col">EMPLOYEE</th>
                         ${dates.map((d, i) => `
                             <th class="print-day-col">
                                 <div>${dayNames[i]}</div>
@@ -1777,20 +1732,6 @@ function generateForemanPrintLayout(weekOffset) {
                     ${workerRows}
                 </tbody>
             </table>
-
-            <div class="print-job-details">
-                <h3>JOB DETAILS</h3>
-                ${jobDetails}
-            </div>
-
-            <div class="print-notes">
-                <h3>NOTES:</h3>
-                <div class="print-notes-lines">
-                    <div class="print-notes-line"></div>
-                    <div class="print-notes-line"></div>
-                    <div class="print-notes-line"></div>
-                </div>
-            </div>
         </div>
     `;
 
