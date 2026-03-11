@@ -1568,6 +1568,49 @@ function initializeData() {
 }
 
 // ============================================================================
+// Print Functions
+// ============================================================================
+
+/**
+ * Prepare the page for printing with current date
+ */
+window.addEventListener('beforeprint', function() {
+    const wrapper = document.querySelector('.schedule-wrapper');
+    if (wrapper) {
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        wrapper.setAttribute('data-print-date', dateStr);
+    }
+
+    // Force desktop view for printing (show full 3-week grid)
+    const wasMobile = isMobileView;
+    if (isMobileView) {
+        isMobileView = false;
+        renderDesktopSchedule();
+    }
+
+    // Store the mobile state to restore after print
+    window._wasMobileBeforePrint = wasMobile;
+});
+
+/**
+ * Restore mobile view after printing
+ */
+window.addEventListener('afterprint', function() {
+    if (window._wasMobileBeforePrint) {
+        isMobileView = true;
+        renderSchedule();
+    }
+});
+
+// ============================================================================
 // Mobile Detection and Helpers
 // ============================================================================
 
