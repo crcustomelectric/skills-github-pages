@@ -166,8 +166,6 @@ header p {
     background: var(--light-gray);
     border-right: 2px solid var(--border-gray);
     padding: 15px;
-    max-height: calc(100vh - 300px);
-    overflow-y: auto;
 }
 
 .roster-header {

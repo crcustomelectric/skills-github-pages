@@ -1313,7 +1313,8 @@ function dropWorkerToCell(event, jobId, dateKey) {
         return dailySchedule[key].assigned && dailySchedule[key].assigned.includes(draggingWorkerId);
     });
 
-    if (isAlreadyAssignedToday && (draggingFromJob === null || draggingFromDate !== dateKey)) {
+    // Only block if dragging from roster - allow job-to-job moves on same day
+    if (isAlreadyAssignedToday && draggingFromJob === null) {
         const worker = workers.find(w => w.id === draggingWorkerId);
         const workerName = worker ? worker.name : 'This worker';
         alert(`${workerName} is already assigned to another job on this day.`);
