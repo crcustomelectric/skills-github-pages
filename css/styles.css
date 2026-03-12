@@ -109,6 +109,60 @@ header p {
     background: #388E3C;
 }
 
+/* Insight Badges (in Header) */
+.insight-badges {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.insight-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.insight-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.badge-warning {
+    background: #ffc107;
+    color: #856404;
+}
+
+.badge-warning:hover {
+    background: #ffb300;
+}
+
+.badge-info {
+    background: #17a2b8;
+    color: white;
+}
+
+.badge-info:hover {
+    background: #138496;
+}
+
+.badge-success {
+    background: #28a745;
+    color: white;
+    cursor: default;
+}
+
+.badge-success:hover {
+    transform: none;
+}
+
 /* Main Content */
 .main-content {
     padding: 20px;
@@ -159,13 +213,19 @@ header p {
     overflow-x: auto;
 }
 
-/* Team Roster (Left Panel) */
+/* Team Roster (Left Panel) - STICKY */
 .schedule-roster {
     flex-shrink: 0;
     width: 200px;
     background: var(--light-gray);
     border-right: 2px solid var(--border-gray);
     padding: 15px;
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    max-height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .roster-header {
@@ -247,6 +307,38 @@ header p {
 
 .worker-chip-apprentice {
     border-color: #4caf50;
+}
+
+/* Compact Worker Chips (No Progress Bars) */
+.worker-chip-compact {
+    padding: 10px 12px;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+}
+
+.worker-chip-compact .chip-name {
+    font-size: 0.95em;
+    flex: 1;
+}
+
+.worker-chip-compact .chip-role {
+    font-size: 0.7em;
+    color: #666;
+    text-transform: uppercase;
+    font-weight: 500;
+    padding: 2px 6px;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+}
+
+/* Selected Worker (Click-to-Assign Mode) */
+.worker-selected {
+    background: #e3f2fd;
+    border-color: #2196f3;
+    box-shadow: 0 0 0 2px #2196f3;
 }
 
 /* Worker Availability Tracking */
@@ -507,6 +599,15 @@ header p {
 @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
+}
+
+/* Click-to-Assign Mode */
+.click-assign-mode {
+    cursor: pointer;
+}
+
+.click-assign-mode:hover {
+    box-shadow: 0 0 0 2px #2196f3;
 }
 
 .cell-demand-row {

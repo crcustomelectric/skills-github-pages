@@ -34,6 +34,7 @@ let planningMode = false; // PM mode: hide assignments, show demands only
 let showWeeklyOverview = false; // Show print-style worker-centric view
 let showUtilization = true; // Show worker utilization panel
 let showSuggestions = true; // Show smart suggestions panel
+let selectedWorkerId = null; // For click-to-assign mode
 
 // ============================================================================
 // Modal Functions
@@ -593,9 +594,8 @@ function renderDesktopSchedule() {
     renderRosterPanel();
     renderScheduleGrid(dates);
 
-    // Auto-render utilization and suggestions panels
-    if (showUtilization) renderUtilization();
-    if (showSuggestions) renderSmartSuggestions();
+    // Render insight badges in header
+    renderInsightBadges();
 }
 
 /**
@@ -702,29 +702,17 @@ function renderRosterPanel() {
     container.innerHTML = filtered.map(w => {
         const scheduledDays = workerScheduleCounts[w.id] || 0;
         const availableDays = totalDays - scheduledDays;
-        const percentFull = Math.round((scheduledDays / totalDays) * 100);
-
-        // Determine status class based on how full schedule is
-        let statusClass = 'status-available';
-        if (percentFull >= 90) statusClass = 'status-full';
-        else if (percentFull >= 70) statusClass = 'status-busy';
-        else if (percentFull >= 40) statusClass = 'status-moderate';
+        const isSelected = selectedWorkerId === w.id;
 
         return `
-        <div class="worker-chip worker-chip-${w.role}"
+        <div class="worker-chip worker-chip-compact worker-chip-${w.role} ${isSelected ? 'worker-selected' : ''}"
+             data-worker-id="${w.id}"
              draggable="true"
              ondragstart="dragWorkerStart(event, ${w.id}, null, null)"
-             title="${w.name} — ${w.role}${w.isForeman ? ' (Foreman)' : ''}\n${scheduledDays} days scheduled, ${availableDays} available">
-            <div class="chip-main">
-                <span class="chip-name">${w.name}</span>
-                <span class="chip-meta">${w.role}${w.isForeman ? ' ★' : ''}</span>
-            </div>
-            <div class="chip-availability ${statusClass}">
-                <div class="availability-bar">
-                    <div class="availability-fill" style="width: ${percentFull}%"></div>
-                </div>
-                <span class="availability-text">${availableDays} free</span>
-            </div>
+             onclick="toggleWorkerSelection(${w.id})"
+             title="${w.name} — ${w.role}${w.isForeman ? ' (Foreman)' : ''}\n${scheduledDays} days scheduled, ${availableDays} available\nClick to select for quick assignment">
+            <span class="chip-name">${w.name}</span>
+            <span class="chip-role">${w.role}${w.isForeman ? ' ★' : ''}</span>
         </div>
     `;
     }).join('');
@@ -920,12 +908,14 @@ function renderScheduleGrid(dates) {
 
                 const assignedWorkers = assigned.map(id => workers.find(w => w.id === id)).filter(Boolean);
 
-                html += `<td class="schedule-cell ${statusClass}"
+                html += `<td class="schedule-cell ${statusClass} ${selectedWorkerId ? 'click-assign-mode' : ''}"
                              data-job-id="${job.id}"
                              data-date-key="${dateKey}"
                              ondragover="handleCellDragOver(event, ${job.id}, '${dateKey}')"
                              ondragleave="this.classList.remove('drag-over')"
-                             ondrop="handleCellDrop(event, ${job.id}, '${dateKey}')">
+                             ondrop="handleCellDrop(event, ${job.id}, '${dateKey}')"
+                             onclick="clickAssignWorker(${job.id}, '${dateKey}')"
+                             title="${selectedWorkerId ? 'Click to assign selected worker' : 'Drag worker here or click worker first'}">
                     <div class="cell-demand-row">
                         <input type="number" class="demand-input" value="${demand}" min="0" max="9"
                                onchange="setDemand(${job.id}, '${dateKey}', this.value)"
@@ -1421,6 +1411,65 @@ function removeScheduleWorker(jobId, dateKey, workerId) {
         saveData();
         renderSchedule();
     }
+}
+
+// ============================================================================
+// Click-to-Assign Handlers (Alternative to Drag & Drop)
+// ============================================================================
+
+/**
+ * Toggle worker selection for click-to-assign mode
+ */
+function toggleWorkerSelection(workerId) {
+    if (selectedWorkerId === workerId) {
+        // Deselect if clicking same worker
+        selectedWorkerId = null;
+    } else {
+        // Select this worker
+        selectedWorkerId = workerId;
+    }
+    renderSchedule();
+}
+
+/**
+ * Assign selected worker to a cell (click-to-assign)
+ */
+function clickAssignWorker(jobId, dateKey) {
+    if (!selectedWorkerId) return;
+
+    const slotKey = `${jobId}_${dateKey}`;
+    if (!dailySchedule[slotKey]) dailySchedule[slotKey] = { demand: 0, assigned: [] };
+    if (!Array.isArray(dailySchedule[slotKey].assigned)) dailySchedule[slotKey].assigned = [];
+
+    // Don't add duplicate
+    if (dailySchedule[slotKey].assigned.includes(selectedWorkerId)) {
+        selectedWorkerId = null;
+        renderSchedule();
+        return;
+    }
+
+    // Check if worker is already assigned to a different job on this date
+    const isAlreadyAssignedToday = Object.keys(dailySchedule).some(key => {
+        if (!key.endsWith(`_${dateKey}`)) return false;
+        if (key === slotKey) return false;
+        return dailySchedule[key].assigned && dailySchedule[key].assigned.includes(selectedWorkerId);
+    });
+
+    if (isAlreadyAssignedToday) {
+        const worker = workers.find(w => w.id === selectedWorkerId);
+        const workerName = worker ? worker.name : 'This worker';
+        alert(`${workerName} is already assigned to another job on this day.`);
+        return;
+    }
+
+    // Assign worker
+    dailySchedule[slotKey].assigned.push(selectedWorkerId);
+
+    // Deselect after assignment
+    selectedWorkerId = null;
+
+    saveData();
+    renderSchedule();
 }
 
 // ============================================================================
@@ -2148,6 +2197,99 @@ function renderSmartSuggestions() {
 function closeSuggestions() {
     const panel = document.getElementById('smartSuggestionsPanel');
     if (panel) panel.style.display = 'none';
+}
+
+/**
+ * Render Insight Badges in Header
+ */
+function renderInsightBadges() {
+    const container = document.getElementById('insightBadges');
+    if (!container) return;
+
+    // Calculate gaps
+    const dates = [];
+    const monday = getWeekMonday(scheduleWeekOffset);
+    for (let day = 0; day < 6; day++) {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + day);
+        dates.push(date);
+    }
+
+    const activeJobs = jobs.filter(j => !j.archived);
+    let gapCount = 0;
+
+    dates.forEach(date => {
+        const dateKey = getDateKey(date);
+        activeJobs.forEach(job => {
+            const slotKey = `${job.id}_${dateKey}`;
+            const slot = dailySchedule[slotKey];
+            if (slot && slot.demand > 0) {
+                const assigned = (slot.assigned || []).length;
+                if (assigned < slot.demand) {
+                    gapCount++;
+                }
+            }
+        });
+    });
+
+    // Calculate underutilized workers
+    const allDates = [];
+    for (let week = 0; week < 3; week++) {
+        const monday = getWeekMonday(scheduleWeekOffset + week);
+        for (let day = 0; day < 6; day++) {
+            const date = new Date(monday);
+            date.setDate(monday.getDate() + day);
+            allDates.push(date);
+        }
+    }
+
+    const totalDays = allDates.length;
+    let underutilizedCount = 0;
+
+    workers.forEach(worker => {
+        let scheduledDays = 0;
+        allDates.forEach(date => {
+            const dateKey = getDateKey(date);
+            const isScheduled = Object.keys(dailySchedule).some(key => {
+                if (key.includes(dateKey)) {
+                    const slot = dailySchedule[key];
+                    return slot && slot.assigned && slot.assigned.includes(worker.id);
+                }
+                return false;
+            });
+            const vacKey = `${worker.id}_${dateKey}`;
+            const isOnVacation = vacationSchedule[vacKey];
+
+            if (isScheduled || isOnVacation) {
+                scheduledDays++;
+            }
+        });
+
+        const percentFull = Math.round((scheduledDays / totalDays) * 100);
+        if (percentFull < 50) {
+            underutilizedCount++;
+        }
+    });
+
+    // Render badges
+    let html = '';
+    if (gapCount > 0) {
+        html += `<button class="insight-badge badge-warning" onclick="renderSmartSuggestions(); document.getElementById('smartSuggestionsPanel').style.display='block';" title="Click to view gaps">
+            ⚠️ ${gapCount} gap${gapCount > 1 ? 's' : ''}
+        </button>`;
+    }
+
+    if (underutilizedCount > 0) {
+        html += `<button class="insight-badge badge-info" onclick="renderUtilization(); document.getElementById('utilizationPanel').style.display='block';" title="Click to view utilization">
+            📊 ${underutilizedCount} underutilized
+        </button>`;
+    }
+
+    if (gapCount === 0 && underutilizedCount === 0) {
+        html = `<span class="insight-badge badge-success">✅ All good!</span>`;
+    }
+
+    container.innerHTML = html;
 }
 
 // ============================================================================
