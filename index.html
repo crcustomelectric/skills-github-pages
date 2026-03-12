@@ -28,12 +28,32 @@
             <div class="header-actions">
                 <button class="add-btn" onclick="showAddWorkerModal()">+ Add Worker</button>
                 <button class="add-btn" onclick="showAddJobModal()">+ Add Job</button>
+                <button class="add-btn toggle-btn" id="planningModeBtn" onclick="togglePlanningMode()" title="Toggle Planning Mode (PM view)">📋 Planning</button>
+                <button class="add-btn" onclick="toggleWeeklyOverview()" title="Show weekly worker allocation view">👷 Weekly Overview</button>
                 <button class="add-btn" onclick="showPrintModal()" title="Print schedule">🖨️ Print</button>
             </div>
         </header>
 
         <!-- 3-Week Lookahead Schedule -->
         <div class="main-content">
+            <!-- Smart Suggestions Panel -->
+            <div id="smartSuggestionsPanel" class="suggestions-panel" style="display: none;">
+                <div class="panel-header">
+                    <h3>⚠️ Smart Suggestions</h3>
+                    <button class="close-btn" onclick="closeSuggestions()">×</button>
+                </div>
+                <div id="suggestionsContent" class="suggestions-content"></div>
+            </div>
+
+            <!-- Worker Utilization Panel -->
+            <div id="utilizationPanel" class="utilization-panel" style="display: none;">
+                <div class="panel-header">
+                    <h3>📊 Worker Utilization</h3>
+                    <button class="close-btn" onclick="closeUtilization()">×</button>
+                </div>
+                <div id="utilizationContent" class="utilization-content"></div>
+            </div>
+
             <div class="schedule-wrapper">
                 <div class="schedule-nav">
                     <button class="schedule-nav-btn" onclick="navigatePrev()">&#8249; Prev</button>
@@ -193,6 +213,19 @@
                     <button type="submit" class="btn-primary">Save Changes</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Weekly Overview Modal -->
+    <div class="modal modal-wide" id="weeklyOverviewModal">
+        <div class="modal-content modal-wide">
+            <div class="modal-header">
+                <h2>📋 Weekly Worker Allocation</h2>
+                <button class="close-btn" onclick="closeWeeklyOverview()">×</button>
+            </div>
+            <div class="modal-body" id="weeklyOverviewContent">
+                <!-- Will be populated by JS -->
+            </div>
         </div>
     </div>
 

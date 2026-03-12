@@ -30,6 +30,10 @@ let currentDayOffset = 0; // Day offset from today for mobile single-day view
 let longPressTimer = null; // Timer for long-press detection
 let touchStartX = 0; // For swipe detection
 let touchStartY = 0;
+let planningMode = false; // PM mode: hide assignments, show demands only
+let showWeeklyOverview = false; // Show print-style worker-centric view
+let showUtilization = true; // Show worker utilization panel
+let showSuggestions = true; // Show smart suggestions panel
 
 // ============================================================================
 // Modal Functions
@@ -588,6 +592,10 @@ function renderDesktopSchedule() {
 
     renderRosterPanel();
     renderScheduleGrid(dates);
+
+    // Auto-render utilization and suggestions panels
+    if (showUtilization) renderUtilization();
+    if (showSuggestions) renderSmartSuggestions();
 }
 
 /**
@@ -923,27 +931,29 @@ function renderScheduleGrid(dates) {
                                onchange="setDemand(${job.id}, '${dateKey}', this.value)"
                                onclick="event.stopPropagation()"
                                title="PM: Set daily manpower need">
-                        <span class="assigned-count">${assigned.length}</span>
+                        <span class="assigned-count ${planningMode ? 'planning-count' : ''}">${assigned.length}</span>
                     </div>
-                    <div class="cell-workers">
-                        ${assignedWorkers.map(w => `
-                            <div class="worker-chip-mini worker-chip-${w.role}"
-                                 draggable="true"
-                                 ondragstart="dragWorkerStart(event, ${w.id}, ${job.id}, '${dateKey}')"
-                                 title="${w.name}">
-                                <span class="chip-name-mini">${w.name.split(' ')[0]}</span>
-                                <button class="chip-remove" onclick="removeScheduleWorker(${job.id}, '${dateKey}', ${w.id}); event.stopPropagation()">×</button>
-                            </div>
-                        `).join('')}
-                    </div>
-                    ${assignedWorkers.length > 0 ? `
-                        <div class="crew-copy-handle"
-                             draggable="true"
-                             ondragstart="startCrewCopy(event, ${job.id}, '${dateKey}')"
-                             ondragend="endCrewCopy(event)"
-                             title="Drag to copy crew across days ⇒">
-                            ⇒
+                    ${!planningMode ? `
+                        <div class="cell-workers">
+                            ${assignedWorkers.map(w => `
+                                <div class="worker-chip-mini worker-chip-${w.role}"
+                                     draggable="true"
+                                     ondragstart="dragWorkerStart(event, ${w.id}, ${job.id}, '${dateKey}')"
+                                     title="${w.name}">
+                                    <span class="chip-name-mini">${w.name.split(' ')[0]}</span>
+                                    <button class="chip-remove" onclick="removeScheduleWorker(${job.id}, '${dateKey}', ${w.id}); event.stopPropagation()">×</button>
+                                </div>
+                            `).join('')}
                         </div>
+                        ${assignedWorkers.length > 0 ? `
+                            <div class="crew-copy-handle"
+                                 draggable="true"
+                                 ondragstart="startCrewCopy(event, ${job.id}, '${dateKey}')"
+                                 ondragend="endCrewCopy(event)"
+                                 title="Drag to copy crew across days ⇒">
+                                ⇒
+                            </div>
+                        ` : ''}
                     ` : ''}
                 </td>`;
             });
@@ -1288,6 +1298,8 @@ function dragWorkerStart(event, workerId, fromJob, fromDate) {
     draggingFromDate = fromDate;
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', String(workerId));
+    // Prevent event from bubbling up to row drag handler
+    event.stopPropagation();
 }
 
 function dropWorkerToCell(event, jobId, dateKey) {
@@ -1791,6 +1803,352 @@ window.addEventListener('afterprint', function() {
         renderSchedule();
     }
 });
+
+// ============================================================================
+// New Features: Planning Mode, Weekly Overview, Utilization, Suggestions
+// ============================================================================
+
+/**
+ * Toggle Planning Mode (PM view - hide assignments, show demands only)
+ */
+function togglePlanningMode() {
+    planningMode = !planningMode;
+    const btn = document.getElementById('planningModeBtn');
+    if (btn) {
+        btn.classList.toggle('active', planningMode);
+        btn.textContent = planningMode ? '📋 Planning (ON)' : '📋 Planning';
+    }
+    renderSchedule();
+}
+
+/**
+ * Toggle Weekly Overview (worker-centric allocation view)
+ */
+function toggleWeeklyOverview() {
+    const modal = document.getElementById('weeklyOverviewModal');
+    if (!modal) return;
+
+    renderWeeklyOverview();
+    modal.classList.add('active');
+}
+
+/**
+ * Close Weekly Overview modal
+ */
+function closeWeeklyOverview() {
+    document.getElementById('weeklyOverviewModal')?.classList.remove('active');
+}
+
+/**
+ * Render Weekly Overview (print-style view in browser)
+ */
+function renderWeeklyOverview() {
+    const container = document.getElementById('weeklyOverviewContent');
+    if (!container) return;
+
+    // Use current week (week 0) for overview
+    const monday = getWeekMonday(scheduleWeekOffset);
+    const dates = [];
+    const dayNames = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+    // Generate Mon-Sat for this week
+    for (let i = 0; i < 6; i++) {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + i);
+        dates.push(date);
+    }
+
+    const activeWorkers = workers.filter(w => !w.archived);
+    const activeJobs = jobs.filter(j => !j.archived);
+
+    // Build worker rows
+    let workerRows = '';
+    activeWorkers.forEach(worker => {
+        workerRows += `
+            <tr class="overview-worker-row">
+                <td class="overview-worker-name">${worker.name}</td>`;
+
+        dates.forEach(date => {
+            const dateKey = getDateKey(date);
+            const vacKey = `${worker.id}_${dateKey}`;
+            const isOnVacation = vacationSchedule[vacKey];
+
+            if (isOnVacation) {
+                workerRows += `<td class="overview-cell cell-vacation">VACATION</td>`;
+                return;
+            }
+
+            // Find which job this worker is assigned to
+            let assignedJob = null;
+            let demand = 0;
+            let assigned = 0;
+
+            activeJobs.forEach(job => {
+                const slotKey = `${job.id}_${dateKey}`;
+                const slot = dailySchedule[slotKey];
+                if (slot && slot.assigned && slot.assigned.includes(worker.id)) {
+                    assignedJob = job;
+                    demand = slot.demand || 0;
+                    assigned = slot.assigned.length;
+                }
+            });
+
+            if (assignedJob) {
+                const statusClass = assigned < demand ? 'cell-short' : 'cell-full';
+                workerRows += `
+                    <td class="overview-cell ${statusClass}">
+                        <div class="overview-job-name">${assignedJob.name}</div>
+                        <div class="overview-crew-info">${assigned}/${demand} crew</div>
+                    </td>`;
+            } else {
+                workerRows += `<td class="overview-cell cell-off">OFF</td>`;
+            }
+        });
+
+        workerRows += `</tr>`;
+    });
+
+    const weekRange = `${formatDateShort(dates[0])} – ${formatDateShort(dates[5])}`;
+
+    const html = `
+        <div class="overview-header">
+            <h3>Week of ${weekRange}</h3>
+        </div>
+        <div class="overview-table-wrapper">
+            <table class="overview-table">
+                <thead>
+                    <tr>
+                        <th class="overview-worker-col">EMPLOYEE</th>
+                        ${dates.map((d, i) => `
+                            <th class="overview-day-col">
+                                <div>${dayNames[i]}</div>
+                                <div class="overview-date-num">${d.getMonth() + 1}/${d.getDate()}</div>
+                            </th>
+                        `).join('')}
+                    </tr>
+                </thead>
+                <tbody>
+                    ${workerRows}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+/**
+ * Render Worker Utilization Panel
+ */
+function renderUtilization() {
+    const panel = document.getElementById('utilizationPanel');
+    const content = document.getElementById('utilizationContent');
+    if (!panel || !content) return;
+
+    // Calculate utilization for all workers across 3 weeks
+    const dates = [];
+    for (let week = 0; week < 3; week++) {
+        const monday = getWeekMonday(scheduleWeekOffset + week);
+        for (let day = 0; day < 6; day++) {
+            const date = new Date(monday);
+            date.setDate(monday.getDate() + day);
+            dates.push(date);
+        }
+    }
+
+    const totalDays = dates.length; // 18 days
+    const utilization = [];
+
+    workers.forEach(worker => {
+        let scheduledDays = 0;
+        dates.forEach(date => {
+            const dateKey = getDateKey(date);
+            // Check if worker is scheduled on any job this day
+            const isScheduled = Object.keys(dailySchedule).some(key => {
+                if (key.includes(dateKey)) {
+                    const slot = dailySchedule[key];
+                    return slot && slot.assigned && slot.assigned.includes(worker.id);
+                }
+                return false;
+            });
+            // Also check if on vacation
+            const vacKey = `${worker.id}_${dateKey}`;
+            const isOnVacation = vacationSchedule[vacKey];
+
+            if (isScheduled || isOnVacation) {
+                scheduledDays++;
+            }
+        });
+
+        const percentFull = Math.round((scheduledDays / totalDays) * 100);
+        utilization.push({
+            worker,
+            scheduledDays,
+            availableDays: totalDays - scheduledDays,
+            percentFull
+        });
+    });
+
+    // Sort by availability (most available first)
+    utilization.sort((a, b) => b.availableDays - a.availableDays);
+
+    const html = `
+        <div class="utilization-list">
+            ${utilization.map(u => {
+                let statusIcon = '✅';
+                let statusClass = 'util-good';
+                if (u.percentFull < 50) {
+                    statusIcon = '⚠️';
+                    statusClass = 'util-low';
+                } else if (u.percentFull >= 90) {
+                    statusIcon = '✅';
+                    statusClass = 'util-full';
+                }
+
+                return `
+                    <div class="utilization-item ${statusClass}">
+                        <div class="util-icon">${statusIcon}</div>
+                        <div class="util-worker">
+                            <strong>${u.worker.name}</strong>
+                            <span class="util-role">${u.worker.role}</span>
+                        </div>
+                        <div class="util-bar-container">
+                            <div class="util-bar">
+                                <div class="util-fill" style="width: ${u.percentFull}%"></div>
+                            </div>
+                        </div>
+                        <div class="util-stats">
+                            <span class="util-days">${u.scheduledDays}/${totalDays} days</span>
+                            <span class="util-percent">${u.percentFull}%</span>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+
+    content.innerHTML = html;
+    panel.style.display = 'block';
+}
+
+/**
+ * Close Utilization Panel
+ */
+function closeUtilization() {
+    const panel = document.getElementById('utilizationPanel');
+    if (panel) panel.style.display = 'none';
+}
+
+/**
+ * Render Smart Suggestions Panel
+ */
+function renderSmartSuggestions() {
+    const panel = document.getElementById('smartSuggestionsPanel');
+    const content = document.getElementById('suggestionsContent');
+    if (!panel || !content) return;
+
+    // Find all gaps (jobs with demand but not enough assigned workers)
+    const gaps = [];
+    const dates = [];
+
+    // Get current week dates
+    const monday = getWeekMonday(scheduleWeekOffset);
+    for (let day = 0; day < 6; day++) {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + day);
+        dates.push(date);
+    }
+
+    const activeJobs = jobs.filter(j => !j.archived);
+
+    dates.forEach(date => {
+        const dateKey = getDateKey(date);
+        activeJobs.forEach(job => {
+            const slotKey = `${job.id}_${dateKey}`;
+            const slot = dailySchedule[slotKey];
+            if (slot && slot.demand > 0) {
+                const assigned = (slot.assigned || []).length;
+                const shortage = slot.demand - assigned;
+
+                if (shortage > 0) {
+                    // Find available workers for this day
+                    const availableWorkers = workers.filter(w => {
+                        // Check if already assigned this day
+                        const isAssigned = Object.keys(dailySchedule).some(key => {
+                            if (key.includes(dateKey)) {
+                                const s = dailySchedule[key];
+                                return s && s.assigned && s.assigned.includes(w.id);
+                            }
+                            return false;
+                        });
+
+                        // Check if on vacation
+                        const vacKey = `${w.id}_${dateKey}`;
+                        const isOnVacation = vacationSchedule[vacKey];
+
+                        return !isAssigned && !isOnVacation && !w.archived;
+                    });
+
+                    gaps.push({
+                        job,
+                        date,
+                        dateKey,
+                        shortage,
+                        assigned,
+                        demand: slot.demand,
+                        availableWorkers
+                    });
+                }
+            }
+        });
+    });
+
+    if (gaps.length === 0) {
+        panel.style.display = 'none';
+        return;
+    }
+
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    const html = `
+        <div class="suggestions-summary">
+            <strong>${gaps.length} gap${gaps.length > 1 ? 's' : ''} found this week</strong>
+        </div>
+        <div class="suggestions-list">
+            ${gaps.map(gap => `
+                <div class="suggestion-item">
+                    <div class="suggestion-header">
+                        <span class="suggestion-job">${gap.job.name}</span>
+                        <span class="suggestion-date">${dayNames[gap.date.getDay()]} ${gap.date.getMonth() + 1}/${gap.date.getDate()}</span>
+                    </div>
+                    <div class="suggestion-details">
+                        <span class="suggestion-shortage">⚠️ Need ${gap.shortage} more worker${gap.shortage > 1 ? 's' : ''} (${gap.assigned}/${gap.demand})</span>
+                    </div>
+                    ${gap.availableWorkers.length > 0 ? `
+                        <div class="suggestion-workers">
+                            <span class="suggestion-label">Available:</span>
+                            ${gap.availableWorkers.slice(0, 3).map(w =>
+                                `<span class="suggestion-worker">${w.name}</span>`
+                            ).join('')}
+                            ${gap.availableWorkers.length > 3 ? `<span class="suggestion-more">+${gap.availableWorkers.length - 3} more</span>` : ''}
+                        </div>
+                    ` : '<div class="suggestion-no-workers">⚠️ No workers available this day</div>'}
+                </div>
+            `).join('')}
+        </div>
+    `;
+
+    content.innerHTML = html;
+    panel.style.display = 'block';
+}
+
+/**
+ * Close Smart Suggestions Panel
+ */
+function closeSuggestions() {
+    const panel = document.getElementById('smartSuggestionsPanel');
+    if (panel) panel.style.display = 'none';
+}
 
 // ============================================================================
 // Mobile Detection and Helpers
