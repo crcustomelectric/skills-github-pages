@@ -211,93 +211,109 @@ header p {
     display: flex;
     gap: 0;
     overflow-x: auto;
+    padding-bottom: 200px; /* Space for bottom tray */
 }
 
-/* Team Roster (Left Panel) - STICKY */
-.schedule-roster {
-    flex-shrink: 0;
-    width: 200px;
+/* Bottom Roster Tray */
+.roster-tray {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 3px solid var(--primary-blue);
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    transition: transform 0.3s ease;
+    max-height: 220px;
+}
+
+.roster-tray.collapsed {
+    transform: translateY(calc(100% - 52px));
+}
+
+.roster-tray-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
     background: var(--light-gray);
-    border-right: 2px solid var(--border-gray);
-    padding: 15px;
-    position: sticky;
-    top: 0;
-    align-self: flex-start;
-    max-height: 100vh;
-    overflow-y: auto;
-    overflow-x: hidden;
-    transition: width 0.3s ease, padding 0.3s ease;
-    position: relative;
+    border-bottom: 2px solid var(--border-gray);
 }
 
-.schedule-roster.collapsed {
-    width: 40px;
-    padding: 15px 8px;
+.roster-tray-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
-.roster-collapse-btn {
-    position: absolute;
-    right: 8px;
-    top: 15px;
-    width: 28px;
-    height: 28px;
+.roster-tray-title h3 {
+    font-size: 1em;
+    color: var(--text-dark);
+    margin: 0;
+}
+
+.active-day-label {
+    font-size: 0.85em;
+    color: #666;
+    font-weight: normal;
+}
+
+.active-day-label.active {
+    color: var(--primary-blue);
+    font-weight: 600;
+}
+
+.roster-tray-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.roster-tray-actions select {
+    padding: 6px 10px;
+    border: 2px solid var(--border-gray);
+    border-radius: 6px;
+    font-size: 0.85em;
+}
+
+.roster-tray-toggle {
+    width: 32px;
+    height: 32px;
     background: white;
     border: 2px solid var(--border-gray);
     border-radius: 4px;
     cursor: pointer;
-    font-size: 18px;
-    font-weight: bold;
+    font-size: 16px;
     color: var(--text-dark);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10;
     transition: all 0.2s ease;
 }
 
-.roster-collapse-btn:hover {
+.roster-tray-toggle:hover {
     background: var(--primary-blue);
     color: white;
     border-color: var(--primary-blue);
 }
 
-.schedule-roster.collapsed .roster-collapse-btn {
-    right: 6px;
+.roster-tray.collapsed .roster-tray-toggle {
     transform: rotate(180deg);
 }
 
-.roster-content {
-    transition: opacity 0.3s ease;
-}
-
-.schedule-roster.collapsed .roster-content {
-    opacity: 0;
-    pointer-events: none;
-    display: none;
-}
-
-.roster-header {
-    margin-bottom: 15px;
-}
-
-.roster-header h3 {
-    font-size: 1.1em;
-    color: var(--text-dark);
-    margin-bottom: 10px;
-}
-
-.roster-header select {
-    width: 100%;
-    padding: 8px;
-    border: 2px solid var(--border-gray);
-    border-radius: 6px;
-    font-size: 0.9em;
+.roster-tray-content {
+    padding: 15px 20px;
+    overflow-y: auto;
+    max-height: 150px;
 }
 
 .roster-workers {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: wrap;
     gap: 8px;
+    align-items: flex-start;
 }
 
 .roster-empty {
@@ -393,6 +409,31 @@ header p {
     background: #e3f2fd;
     border-color: #2196f3;
     box-shadow: 0 0 0 2px #2196f3;
+}
+
+/* Worker Availability States (for active day filtering) */
+.worker-chip.worker-available {
+    opacity: 1;
+    border-width: 2px;
+}
+
+.worker-chip.worker-assigned {
+    opacity: 0.4;
+    filter: grayscale(50%);
+}
+
+.worker-chip.worker-on-vacation {
+    display: none;
+}
+
+.col-day.day-active {
+    background: var(--primary-blue);
+    color: white;
+    cursor: pointer;
+}
+
+.col-day.day-active:hover {
+    background: var(--light-blue);
 }
 
 /* Worker Availability Tracking */

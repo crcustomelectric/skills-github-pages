@@ -62,27 +62,33 @@
                     <button class="schedule-nav-btn" onclick="navigateNext()">Next &#8250;</button>
                 </div>
                 <div class="schedule-body">
-                    <!-- Team Roster -->
-                    <div class="schedule-roster" id="scheduleRoster"
-                         ondragover="event.preventDefault(); this.classList.add('roster-drag-over')"
-                         ondragleave="this.classList.remove('roster-drag-over')"
-                         ondrop="dropWorkerToRoster(event)">
-                        <button class="roster-collapse-btn" id="rosterCollapseBtn" onclick="toggleRoster()" title="Collapse roster">&#8249;</button>
-                        <div class="roster-content" id="rosterContent">
-                            <div class="roster-header">
-                                <h3>Team Roster</h3>
-                                <select id="rosterDivisionFilter" onchange="renderSchedule()">
-                                    <option value="all">All</option>
-                                    <option value="commercial">Commercial</option>
-                                    <option value="residential">Residential</option>
-                                </select>
-                            </div>
-                            <div class="roster-workers" id="rosterWorkers"></div>
-                        </div>
-                    </div>
                     <!-- Schedule Grid -->
                     <div class="schedule-grid-container">
                         <div id="scheduleGrid"></div>
+                    </div>
+                </div>
+
+                <!-- Bottom Roster Tray -->
+                <div class="roster-tray" id="rosterTray"
+                     ondragover="event.preventDefault(); this.classList.add('roster-drag-over')"
+                     ondragleave="this.classList.remove('roster-drag-over')"
+                     ondrop="dropWorkerToRoster(event)">
+                    <div class="roster-tray-header">
+                        <div class="roster-tray-title">
+                            <h3>Available Workers</h3>
+                            <span class="active-day-label" id="activeDayLabel">Click a day to filter</span>
+                        </div>
+                        <div class="roster-tray-actions">
+                            <select id="rosterDivisionFilter" onchange="renderSchedule()">
+                                <option value="all">All</option>
+                                <option value="commercial">Commercial</option>
+                                <option value="residential">Residential</option>
+                            </select>
+                            <button class="roster-tray-toggle" id="rosterTrayToggle" onclick="toggleRosterTray()" title="Collapse roster">▼</button>
+                        </div>
+                    </div>
+                    <div class="roster-tray-content" id="rosterTrayContent">
+                        <div class="roster-workers" id="rosterWorkers"></div>
                     </div>
                 </div>
             </div>
