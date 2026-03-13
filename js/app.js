@@ -35,6 +35,7 @@ let showWeeklyOverview = false; // Show print-style worker-centric view
 let showUtilization = true; // Show worker utilization panel
 let showSuggestions = true; // Show smart suggestions panel
 let selectedWorkerId = null; // For click-to-assign mode
+let activeDateKey = null; // For day-based roster filtering
 
 // ============================================================================
 // Modal Functions
@@ -635,19 +636,50 @@ function renderMobileSchedule() {
 }
 
 /**
- * Toggle roster panel collapse/expand
+ * Toggle roster tray collapse/expand
  */
-function toggleRoster() {
-    const roster = document.getElementById('scheduleRoster');
-    const btn = document.getElementById('rosterCollapseBtn');
-    if (!roster || !btn) return;
+function toggleRosterTray() {
+    const tray = document.getElementById('rosterTray');
+    const btn = document.getElementById('rosterTrayToggle');
+    if (!tray || !btn) return;
 
-    roster.classList.toggle('collapsed');
+    tray.classList.toggle('collapsed');
 
-    if (roster.classList.contains('collapsed')) {
+    if (tray.classList.contains('collapsed')) {
         btn.title = 'Expand roster';
     } else {
         btn.title = 'Collapse roster';
+    }
+}
+
+/**
+ * Activate a day for roster filtering
+ */
+function activateDay(dateKey, dayElement) {
+    // Toggle: if clicking same day, deactivate
+    if (activeDateKey === dateKey) {
+        activeDateKey = null;
+    } else {
+        activeDateKey = dateKey;
+    }
+
+    // Update UI
+    renderSchedule();
+
+    // Update active day label
+    const label = document.getElementById('activeDayLabel');
+    if (label) {
+        if (activeDateKey) {
+            const date = new Date(activeDateKey.replace(/_/g, '/'));
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const dayName = dayNames[date.getDay()];
+            const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+            label.textContent = `${dayName} ${dateStr}`;
+            label.classList.add('active');
+        } else {
+            label.textContent = 'Click a day to filter';
+            label.classList.remove('active');
+        }
     }
 }
 
@@ -721,13 +753,36 @@ function renderRosterPanel() {
         const availableDays = totalDays - scheduledDays;
         const isSelected = selectedWorkerId === w.id;
 
+        // Determine availability state for active day
+        let availabilityClass = '';
+        let availabilityStatus = '';
+        if (activeDateKey) {
+            // Check if on vacation
+            const vacKey = `${w.id}_${activeDateKey}`;
+            if (vacationSchedule[vacKey]) {
+                availabilityClass = 'worker-on-vacation';
+                availabilityStatus = ' (On vacation)';
+            } else {
+                // Check if already assigned
+                const isAssigned = Object.keys(dailySchedule).some(key => {
+                    if (key.endsWith(`_${activeDateKey}`)) {
+                        const slot = dailySchedule[key];
+                        return slot && slot.assigned && slot.assigned.includes(w.id);
+                    }
+                    return false;
+                });
+                availabilityClass = isAssigned ? 'worker-assigned' : 'worker-available';
+                availabilityStatus = isAssigned ? ' (Already assigned)' : ' (Available)';
+            }
+        }
+
         return `
-        <div class="worker-chip worker-chip-compact worker-chip-${w.role} ${isSelected ? 'worker-selected' : ''}"
+        <div class="worker-chip worker-chip-compact worker-chip-${w.role} ${isSelected ? 'worker-selected' : ''} ${availabilityClass}"
              data-worker-id="${w.id}"
              draggable="true"
              ondragstart="dragWorkerStart(event, ${w.id}, null, null)"
              onclick="toggleWorkerSelection(${w.id})"
-             title="${w.name} — ${w.role}${w.isForeman ? ' (Foreman)' : ''}\n${scheduledDays} days scheduled, ${availableDays} available\nClick to select for quick assignment">
+             title="${w.name} — ${w.role}${w.isForeman ? ' (Foreman)' : ''}${availabilityStatus}\n${scheduledDays} days scheduled, ${availableDays} available\nClick to select for quick assignment">
             <span class="chip-name">${w.name}</span>
             <span class="chip-role">${w.role}${w.isForeman ? ' ★' : ''}</span>
         </div>
@@ -796,11 +851,13 @@ function renderScheduleGrid(dates) {
     html += `</tr><tr class="day-headers">
                 <th class="col-job"></th>`;
 
-    // Day headers (18 columns = 3 weeks × 6 days) with dates
+    // Day headers (18 columns = 3 weeks × 6 days) with dates - clickable for filtering
     dates.forEach(date => {
         const dayName = dayNames[date.getDay() === 0 ? 6 : date.getDay() - 1];
         const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
-        html += `<th class="col-day">${dayName}<br><small>${dateStr}</small></th>`;
+        const dateKey = getDateKey(date);
+        const activeClass = activeDateKey === dateKey ? 'day-active' : '';
+        html += `<th class="col-day ${activeClass}" onclick="activateDay('${dateKey}', this)" style="cursor: pointer;" title="Click to filter available workers">${dayName}<br><small>${dateStr}</small></th>`;
     });
 
     html += `</tr></thead><tbody>`;
