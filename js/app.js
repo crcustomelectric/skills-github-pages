@@ -635,6 +635,23 @@ function renderMobileSchedule() {
 }
 
 /**
+ * Toggle roster panel collapse/expand
+ */
+function toggleRoster() {
+    const roster = document.getElementById('scheduleRoster');
+    const btn = document.getElementById('rosterCollapseBtn');
+    if (!roster || !btn) return;
+
+    roster.classList.toggle('collapsed');
+
+    if (roster.classList.contains('collapsed')) {
+        btn.title = 'Expand roster';
+    } else {
+        btn.title = 'Collapse roster';
+    }
+}
+
+/**
  * Render the team roster panel (left side)
  */
 function renderRosterPanel() {
@@ -738,13 +755,42 @@ function renderScheduleGrid(dates) {
             <tr class="week-headers">
                 <th class="col-job">Job Site</th>`;
 
-    // Week headers (3 weeks)
+    // Week headers (3 weeks) with completion indicator
     for (let week = 0; week < 3; week++) {
         const weekStart = getWeekMonday(scheduleWeekOffset + week);
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 5); // Saturday
         const weekLabel = `${formatDateShort(weekStart)} – ${formatDateShort(weekEnd)}`;
-        html += `<th class="col-week-header" colspan="6">${weekLabel}</th>`;
+
+        // Check if week is fully staffed
+        let weekFullyStaffed = true;
+        for (let day = 0; day < 6; day++) {
+            const date = new Date(weekStart);
+            date.setDate(weekStart.getDate() + day);
+            const dateKey = getDateKey(date);
+
+            // Calculate needed vs assigned for this day
+            let totalNeeded = 0;
+            const assignedWorkerIds = new Set();
+            Object.keys(dailySchedule).forEach(key => {
+                if (key.endsWith(`_${dateKey}`)) {
+                    const slot = dailySchedule[key];
+                    totalNeeded += parseInt(slot.demand) || 0;
+                    if (slot.assigned) {
+                        slot.assigned.forEach(wId => assignedWorkerIds.add(wId));
+                    }
+                }
+            });
+
+            // If any day has unmet demand, week is not fully staffed
+            if (totalNeeded > 0 && assignedWorkerIds.size < totalNeeded) {
+                weekFullyStaffed = false;
+                break;
+            }
+        }
+
+        const weekClass = weekFullyStaffed ? 'week-complete' : '';
+        html += `<th class="col-week-header ${weekClass}" colspan="6">${weekLabel}</th>`;
     }
 
     html += `</tr><tr class="day-headers">
@@ -811,12 +857,11 @@ function renderScheduleGrid(dates) {
         }
 
         html += `<td class="tally-cell ${tallyClass}" title="Need ${totalNeeded} | Assigned ${assignedCount} | Available ${availableCount}">
-            <div class="progress-bar-wrapper">
-                <div class="progress-bar-track">
-                    <div class="progress-bar-fill" style="width: ${progressPercent}%"></div>
-                </div>
-                <div class="progress-bar-tooltip">
-                    Need ${totalNeeded} | Assigned ${assignedCount}<br>Available ${availableCount}
+            <div class="tally-box-display">
+                <div class="tally-box-bar" style="width: ${progressPercent}%"></div>
+                <div class="tally-box-text">
+                    <span class="tally-needed">${totalNeeded}</span> /
+                    <span class="tally-assigned">${assignedCount}</span>
                 </div>
             </div>
         </td>`;
@@ -883,9 +928,9 @@ function renderScheduleGrid(dates) {
                             <div class="sched-job-div badge-${job.division}">${job.division}</div>
                         </div>
                         <div class="job-actions">
-                            <button class="job-action-btn edit-btn" onclick="editJob(${job.id}); event.stopPropagation();">Edit</button>
-                            <button class="job-action-btn archive-btn" onclick="archiveJob(${job.id}); event.stopPropagation();">Archive</button>
-                            <button class="job-action-btn remove-btn" onclick="removeJob(${job.id}); event.stopPropagation();">Delete</button>
+                            <button class="job-action-btn edit-btn" onclick="editJob(${job.id}); event.stopPropagation();" title="Edit">✎</button>
+                            <button class="job-action-btn archive-btn" onclick="archiveJob(${job.id}); event.stopPropagation();" title="Archive">📦</button>
+                            <button class="job-action-btn remove-btn" onclick="removeJob(${job.id}); event.stopPropagation();" title="Delete">×</button>
                         </div>
                     </div>
                 </td>`;
