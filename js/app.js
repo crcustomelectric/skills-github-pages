@@ -37,6 +37,35 @@ let showSuggestions = true; // Show smart suggestions panel
 let selectedWorkerId = null; // For click-to-assign mode
 let activeDateKey = null; // For day-based roster filtering
 
+// Manpower tracking constants
+const ROLE_WEIGHTS = {
+    'foreman': 1.3,      // 30% more productive (experienced, decision-maker)
+    'journeyman': 1.0,   // Baseline
+    'apprentice': 0.6    // 60% productive (learning, needs supervision)
+};
+
+// Crew size efficiency curve (diminishing returns as crew grows)
+const EFFICIENCY_CURVE = {
+    1: 1.00,  // Solo work, no coordination overhead
+    2: 1.00,  // Ideal pairing, baseline
+    3: 0.90,  // Slight coordination tax
+    4: 0.82,  // Moderate coordination, space constraints
+    5: 0.75,  // Getting crowded
+    6: 0.68,  // Too many people, serious overhead
+    7: 0.62,  // Severe diminishing returns
+    8: 0.58   // Maximum before negative returns
+};
+
+/**
+ * Get efficiency multiplier for a given crew size
+ */
+function getEfficiencyMultiplier(crewSize) {
+    if (crewSize <= 0) return 0;
+    if (crewSize <= 8) return EFFICIENCY_CURVE[crewSize];
+    // For very large crews, use worst efficiency
+    return 0.50;
+}
+
 // ============================================================================
 // Modal Functions
 // ============================================================================
@@ -572,6 +601,135 @@ function renderSchedule() {
 }
 
 /**
+ * Calculate job staffing status (over/under scheduled vs baseline manpower)
+ * Returns: { status: 'ahead'|'on-track'|'behind'|'critical', daysAheadBehind, details }
+ */
+function calculateJobStaffingStatus(jobId) {
+    const job = jobs.find(j => j.id === jobId);
+    if (!job) return null;
+
+    // Get all dates for visible 3 weeks
+    const dates = [];
+    for (let week = 0; week < 3; week++) {
+        const monday = getWeekMonday(scheduleWeekOffset + week);
+        for (let day = 0; day < 6; day++) {
+            const date = new Date(monday);
+            date.setDate(monday.getDate() + day);
+            dates.push(date);
+        }
+    }
+
+    let baselineJMDays = 0;      // Baseline journeyman-days (from generic manpower)
+    let actualEffectiveJMDays = 0; // Actual effective journeyman-days (weighted + efficiency)
+
+    dates.forEach(date => {
+        const dateKey = getDateKey(date);
+        const slotKey = `${jobId}_${dateKey}`;
+        const slot = dailySchedule[slotKey];
+
+        if (!slot) return;
+
+        // Baseline: generic manpower (treated as journeymen)
+        if (slot.manpower) {
+            baselineJMDays += slot.manpower;
+        }
+
+        // Actual: assigned workers with role weighting
+        if (slot.assigned && slot.assigned.length > 0) {
+            const crewSize = slot.assigned.length;
+            let weightedSum = 0;
+
+            slot.assigned.forEach(workerId => {
+                const worker = workers.find(w => w.id === workerId);
+                if (worker) {
+                    const roleWeight = ROLE_WEIGHTS[worker.role] || 1.0;
+                    weightedSum += roleWeight;
+                }
+            });
+
+            // Apply efficiency curve based on crew size
+            const efficiency = getEfficiencyMultiplier(crewSize);
+            const effectiveJMDays = weightedSum * efficiency;
+            actualEffectiveJMDays += effectiveJMDays;
+        }
+    });
+
+    // If no baseline, can't calculate status
+    if (baselineJMDays === 0) return null;
+
+    // Calculate ratio and days ahead/behind
+    const ratio = actualEffectiveJMDays / baselineJMDays;
+    const daysAheadBehind = actualEffectiveJMDays - baselineJMDays;
+
+    // Determine status
+    let status = 'on-track';
+    if (ratio >= 1.10) {
+        status = 'ahead';
+    } else if (ratio < 0.70) {
+        status = 'critical';
+    } else if (ratio < 0.90) {
+        status = 'behind';
+    }
+
+    return {
+        status,
+        daysAheadBehind: Math.round(daysAheadBehind * 10) / 10, // Round to 1 decimal
+        ratio,
+        baselineJMDays: Math.round(baselineJMDays * 10) / 10,
+        actualEffectiveJMDays: Math.round(actualEffectiveJMDays * 10) / 10
+    };
+}
+
+/**
+ * Render staffing status indicator for a job
+ * Returns HTML string with icon and tooltip
+ */
+function renderStaffingStatusIndicator(jobId) {
+    const status = calculateJobStaffingStatus(jobId);
+    if (!status) return ''; // No baseline manpower to compare against
+
+    const { status: statusType, daysAheadBehind, ratio, baselineJMDays, actualEffectiveJMDays } = status;
+
+    // Choose icon and color based on status
+    let icon = '';
+    let colorClass = '';
+    let statusText = '';
+
+    if (statusType === 'ahead') {
+        icon = '⚡';
+        colorClass = 'status-ahead';
+        statusText = 'Ahead of schedule';
+    } else if (statusType === 'on-track') {
+        icon = '✓';
+        colorClass = 'status-on-track';
+        statusText = 'On track';
+    } else if (statusType === 'behind') {
+        icon = '⚠️';
+        colorClass = 'status-behind';
+        statusText = 'Behind schedule';
+    } else if (statusType === 'critical') {
+        icon = '⚠️';
+        colorClass = 'status-critical';
+        statusText = 'Critically understaffed';
+    }
+
+    // Format days ahead/behind display
+    const daysDisplay = daysAheadBehind > 0
+        ? `+${daysAheadBehind.toFixed(1)}d`
+        : `${daysAheadBehind.toFixed(1)}d`;
+
+    // Build detailed tooltip
+    const percentOfBaseline = Math.round(ratio * 100);
+    const tooltipText = `${statusText}
+Baseline: ${baselineJMDays} JM-days (generic manpower)
+Scheduled: ${actualEffectiveJMDays} effective JM-days (${percentOfBaseline}%)
+Difference: ${daysDisplay} journeyman-days
+${daysAheadBehind > 0 ? 'Ahead by ~' + Math.abs(Math.round(daysAheadBehind)) + ' days' : daysAheadBehind < 0 ? 'Behind by ~' + Math.abs(Math.round(daysAheadBehind)) + ' days' : 'On schedule'}`;
+
+    return `<span class="staffing-status-indicator ${colorClass}" title="${tooltipText}">${icon} ${daysDisplay}</span>`;
+}
+
+/**
  * Desktop 3-week schedule view
  */
 function renderDesktopSchedule() {
@@ -981,7 +1139,10 @@ function renderScheduleGrid(dates) {
                             ⋮⋮
                         </div>
                         <div class="job-info">
-                            <div class="sched-job-name">${job.name}</div>
+                            <div class="sched-job-name">
+                                ${job.name}
+                                ${renderStaffingStatusIndicator(job.id)}
+                            </div>
                             <div class="sched-job-div badge-${job.division}">${job.division}</div>
                         </div>
                         <div class="job-actions">
