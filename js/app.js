@@ -630,8 +630,8 @@ function calculateJobStaffingStatus(jobId) {
         if (!slot) return;
 
         // Baseline: generic manpower (treated as journeymen)
-        if (slot.manpower) {
-            baselineJMDays += slot.manpower;
+        if (slot.demand) {
+            baselineJMDays += slot.demand;
         }
 
         // Actual: assigned workers with role weighting
