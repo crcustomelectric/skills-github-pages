@@ -32,6 +32,7 @@
                 <button class="add-btn toggle-btn" id="planningModeBtn" onclick="togglePlanningMode()" title="Toggle Planning Mode (PM view)">📋 Planning</button>
                 <button class="add-btn" onclick="toggleWeeklyOverview()" title="Show weekly worker allocation view">👷 Weekly Overview</button>
                 <button class="add-btn" onclick="showPrintModal()" title="Print schedule">🖨️ Print</button>
+                <button class="add-btn" onclick="setJobTreadGrantKey()" title="Configure JobTread API">🔗 JobTread</button>
             </div>
         </header>
 
@@ -60,6 +61,10 @@
                     <button class="schedule-nav-btn" onclick="navigatePrev()">&#8249; Prev</button>
                     <span class="schedule-week-range" id="scheduleWeekRange" onclick="isMobileView && jumpToToday()">Loading...</span>
                     <button class="schedule-nav-btn" onclick="navigateNext()">Next &#8250;</button>
+                </div>
+                <div class="schedule-nav jobtread-actions" id="jobtreadActions" style="display: none; gap: 8px; margin-top: 8px;">
+                    <button class="add-btn" id="pushToJobtreadBtn" onclick="pushCurrentDayToJobTread()" title="Push this day's schedule to JobTread">📤 Push to JobTread</button>
+                    <button class="add-btn" id="deleteFromJobtreadBtn" onclick="deleteCurrentDayFromJobTread()" title="Delete this day's schedule from JobTread" style="background: #dc3545;">🗑️ Delete from JobTread</button>
                 </div>
                 <div class="schedule-body">
                     <!-- Schedule Grid -->

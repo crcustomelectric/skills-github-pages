@@ -10,6 +10,10 @@ let dailySchedule = {}; // key: "jobId_dateString", value: { demand, assigned: [
 let vacationSchedule = {}; // key: "workerId_dateString", value: true (on vacation)
 let scheduleWeekOffset = 0; // weeks from current week for 3-week lookahead
 
+// JobTread integration
+let jobtreadGrantKey = ''; // Stored separately for security
+let jobtreadTaskIds = {}; // key: "jobId_dateString", value: jobtread task ID
+
 // Drag state for schedule
 let draggingWorkerId = null;
 let draggingFromJob = null;
@@ -750,6 +754,12 @@ function renderDesktopSchedule() {
     const label = document.getElementById('scheduleWeekRange');
     if (label) label.textContent = `${rangeStart} – ${rangeEnd}`;
 
+    // Hide JobTread actions in desktop view
+    const jobtreadActions = document.getElementById('jobtreadActions');
+    if (jobtreadActions) {
+        jobtreadActions.style.display = 'none';
+    }
+
     renderRosterPanel();
     renderScheduleGrid(dates);
 
@@ -784,6 +794,12 @@ function renderMobileSchedule() {
     const label = document.getElementById('scheduleWeekRange');
     if (label) {
         label.innerHTML = `${dayName}, ${monthName} ${dayNum}${dayLabel}`;
+    }
+
+    // Show JobTread actions in mobile view
+    const jobtreadActions = document.getElementById('jobtreadActions');
+    if (jobtreadActions) {
+        jobtreadActions.style.display = 'flex';
     }
 
     // Render mobile roster
@@ -1840,11 +1856,15 @@ function saveData() {
         database.ref('jobs').set(jobs);
         database.ref('dailySchedule').set(dailySchedule);
         database.ref('vacationSchedule').set(vacationSchedule);
+        database.ref('jobtreadGrantKey').set(jobtreadGrantKey);
+        database.ref('jobtreadTaskIds').set(jobtreadTaskIds);
     } else {
         localStorage.setItem('workers', JSON.stringify(workers));
         localStorage.setItem('jobs', JSON.stringify(jobs));
         localStorage.setItem('dailySchedule', JSON.stringify(dailySchedule));
         localStorage.setItem('vacationSchedule', JSON.stringify(vacationSchedule));
+        localStorage.setItem('jobtreadGrantKey', jobtreadGrantKey);
+        localStorage.setItem('jobtreadTaskIds', JSON.stringify(jobtreadTaskIds));
     }
 }
 
@@ -1882,11 +1902,28 @@ function initializeData() {
             vacationSchedule = data || {};
             renderSchedule();
         });
+
+        database.ref('jobtreadGrantKey').on('value', (snapshot) => {
+            jobtreadGrantKey = snapshot.val() || '';
+        });
+
+        database.ref('jobtreadTaskIds').on('value', (snapshot) => {
+            jobtreadTaskIds = snapshot.val() || {};
+        });
     } else {
         workers = JSON.parse(localStorage.getItem('workers')) || [];
         jobs = JSON.parse(localStorage.getItem('jobs')) || [];
         dailySchedule = JSON.parse(localStorage.getItem('dailySchedule')) || {};
         vacationSchedule = JSON.parse(localStorage.getItem('vacationSchedule')) || {};
+        jobtreadGrantKey = localStorage.getItem('jobtreadGrantKey') || '';
+        jobtreadTaskIds = JSON.parse(localStorage.getItem('jobtreadTaskIds')) || {};
+
+        // For POC: Set grant key if empty
+        if (!jobtreadGrantKey) {
+            jobtreadGrantKey = '22TLZYSAhsCX5uzg3ERPfucaNDiHWAerxL';
+            saveData();
+        }
+
         renderWorkers();
         renderJobs();
         renderSchedule();
@@ -2651,6 +2688,217 @@ function handleTouchEnd(event) {
             // Swipe left - next day
             shiftMobileDay(1);
         }
+    }
+}
+
+// ============================================================================
+// JobTread Integration
+// ============================================================================
+
+/**
+ * Call JobTread Pave API
+ */
+async function callJobTreadAPI(query) {
+    if (!jobtreadGrantKey) {
+        alert('JobTread Grant Key not set. Please configure in settings.');
+        return null;
+    }
+
+    try {
+        const response = await fetch('https://api.jobtread.com/pave', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                query: {
+                    $: {
+                        grantKey: jobtreadGrantKey
+                    },
+                    ...query
+                }
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('JobTread API error:', error);
+        alert(`JobTread API error: ${error.message}`);
+        return null;
+    }
+}
+
+/**
+ * Push a day's schedule to JobTread
+ */
+async function pushDayToJobTread(dateKey) {
+    const date = new Date(dateKey);
+    const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+    if (!confirm(`Push schedule for ${dateStr} to JobTread?`)) {
+        return;
+    }
+
+    // Get all jobs scheduled for this day
+    const scheduledJobs = [];
+    Object.keys(dailySchedule).forEach(key => {
+        if (key.endsWith(`_${dateKey}`)) {
+            const jobId = parseInt(key.split('_')[0]);
+            const slot = dailySchedule[key];
+            const job = jobs.find(j => j.id === jobId);
+
+            if (job && slot.assigned && slot.assigned.length > 0) {
+                scheduledJobs.push({ job, slot });
+            }
+        }
+    });
+
+    if (scheduledJobs.length === 0) {
+        alert('No workers assigned for this day.');
+        return;
+    }
+
+    console.log(`Pushing ${scheduledJobs.length} jobs to JobTread for ${dateStr}...`);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const { job, slot } of scheduledJobs) {
+        const assignedWorkers = slot.assigned
+            .map(wId => workers.find(w => w.id === wId))
+            .filter(Boolean)
+            .map(w => w.name)
+            .join(', ');
+
+        const taskName = `[Man Loader] ${job.name} - ${dateStr}`;
+        const taskDescription = `Crew: ${assignedWorkers}\n\nScheduled via Man Loader on ${new Date().toLocaleDateString()}`;
+
+        try {
+            // Create task in JobTread
+            const result = await callJobTreadAPI({
+                tasks: {
+                    $create: {
+                        name: taskName,
+                        description: taskDescription,
+                        dueDate: dateKey,
+                        // assignees: assignedWorkers, // May need to map to JobTread user IDs
+                    }
+                }
+            });
+
+            if (result && result.tasks && result.tasks.length > 0) {
+                // Store the task ID for later deletion
+                const taskId = result.tasks[0].id;
+                jobtreadTaskIds[`${job.id}_${dateKey}`] = taskId;
+                successCount++;
+            } else {
+                console.error('Failed to create task:', job.name);
+                errorCount++;
+            }
+        } catch (error) {
+            console.error('Error pushing job:', job.name, error);
+            errorCount++;
+        }
+    }
+
+    saveData(); // Save task IDs
+    alert(`Pushed to JobTread:\n✓ ${successCount} tasks created\n${errorCount > 0 ? `✗ ${errorCount} errors` : ''}`);
+}
+
+/**
+ * Delete a day's schedule from JobTread
+ */
+async function deleteDayFromJobTread(dateKey) {
+    const date = new Date(dateKey);
+    const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+    if (!confirm(`Delete all Man Loader tasks for ${dateStr} from JobTread?\n\nThis cannot be undone.`)) {
+        return;
+    }
+
+    // Find all task IDs for this day
+    const taskIdsToDelete = [];
+    Object.keys(jobtreadTaskIds).forEach(key => {
+        if (key.endsWith(`_${dateKey}`)) {
+            taskIdsToDelete.push({
+                key,
+                taskId: jobtreadTaskIds[key]
+            });
+        }
+    });
+
+    if (taskIdsToDelete.length === 0) {
+        alert('No JobTread tasks found for this day.');
+        return;
+    }
+
+    console.log(`Deleting ${taskIdsToDelete.length} tasks from JobTread...`);
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const { key, taskId } of taskIdsToDelete) {
+        try {
+            const result = await callJobTreadAPI({
+                tasks: {
+                    $delete: {
+                        id: taskId
+                    }
+                }
+            });
+
+            if (result) {
+                delete jobtreadTaskIds[key];
+                successCount++;
+            } else {
+                errorCount++;
+            }
+        } catch (error) {
+            console.error('Error deleting task:', taskId, error);
+            errorCount++;
+        }
+    }
+
+    saveData(); // Save updated task IDs
+    alert(`Deleted from JobTread:\n✓ ${successCount} tasks removed\n${errorCount > 0 ? `✗ ${errorCount} errors` : ''}`);
+}
+
+/**
+ * Set JobTread Grant Key
+ */
+function setJobTreadGrantKey() {
+    const key = prompt('Enter JobTread Grant Key:', jobtreadGrantKey);
+    if (key !== null) {
+        jobtreadGrantKey = key.trim();
+        saveData();
+        alert('JobTread Grant Key saved.');
+    }
+}
+
+/**
+ * Push current mobile day to JobTread
+ */
+function pushCurrentDayToJobTread() {
+    if (isMobileView) {
+        const targetDate = getMobileDay();
+        const dateKey = getDateKey(targetDate);
+        pushDayToJobTread(dateKey);
+    }
+}
+
+/**
+ * Delete current mobile day from JobTread
+ */
+function deleteCurrentDayFromJobTread() {
+    if (isMobileView) {
+        const targetDate = getMobileDay();
+        const dateKey = getDateKey(targetDate);
+        deleteDayFromJobTread(dateKey);
     }
 }
 
