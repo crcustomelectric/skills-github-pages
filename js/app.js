@@ -2717,26 +2717,33 @@ async function callJobTreadAPI(query) {
     }
 
     try {
+        const requestBody = {
+            query: {
+                $: {
+                    grantKey: jobtreadGrantKey
+                },
+                ...query
+            }
+        };
+
+        console.log('JobTread API Request:', JSON.stringify(requestBody, null, 2));
+
         const response = await fetch('https://api.jobtread.com/pave', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                query: {
-                    $: {
-                        grantKey: jobtreadGrantKey
-                    },
-                    ...query
-                }
-            })
+            body: JSON.stringify(requestBody)
         });
 
+        const data = await response.json();
+        console.log('JobTread API Response:', data);
+
         if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
+            const errorMsg = data.error || data.message || JSON.stringify(data);
+            throw new Error(`API error ${response.status}: ${errorMsg}`);
         }
 
-        const data = await response.json();
         return data;
     } catch (error) {
         console.error('JobTread API error:', error);
@@ -2790,6 +2797,9 @@ async function pushDayToJobTread(dateKey) {
         const taskName = `[Man Loader] ${job.name} - ${dateStr}`;
         const taskDescription = `Crew: ${assignedWorkers}\n\nScheduled via Man Loader on ${new Date().toLocaleDateString()}`;
 
+        // Convert dateKey (YYYY_MM_DD) to ISO date format (YYYY-MM-DD)
+        const isoDate = dateKey.replace(/_/g, '-');
+
         try {
             // Create task in JobTread
             const result = await callJobTreadAPI({
@@ -2797,8 +2807,8 @@ async function pushDayToJobTread(dateKey) {
                     $create: {
                         name: taskName,
                         description: taskDescription,
-                        dueDate: dateKey,
-                        // assignees: assignedWorkers, // May need to map to JobTread user IDs
+                        dueDate: isoDate,
+                        // Note: May need jobId or other required fields
                     }
                 }
             });
