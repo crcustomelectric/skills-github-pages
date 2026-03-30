@@ -815,9 +815,15 @@ function renderMobileSchedule() {
 function toggleRosterTray() {
     const tray = document.getElementById('rosterTray');
     const btn = document.getElementById('rosterTrayToggle');
+    const scheduleBody = document.querySelector('.schedule-body');
     if (!tray || !btn) return;
 
     tray.classList.toggle('collapsed');
+
+    // Remove padding from schedule body when roster is collapsed
+    if (scheduleBody) {
+        scheduleBody.classList.toggle('roster-collapsed');
+    }
 
     if (tray.classList.contains('collapsed')) {
         btn.title = 'Expand roster';
@@ -1031,7 +1037,13 @@ function renderScheduleGrid(dates) {
         const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
         const dateKey = getDateKey(date);
         const activeClass = activeDateKey === dateKey ? 'day-active' : '';
-        html += `<th class="col-day ${activeClass}" onclick="activateDay('${dateKey}', this)" style="cursor: pointer;" title="Click to filter available workers">${dayName}<br><small>${dateStr}</small></th>`;
+        html += `<th class="col-day ${activeClass}" onclick="activateDay('${dateKey}', this)" style="cursor: pointer;" title="Click to filter available workers">
+            ${dayName}<br><small>${dateStr}</small>
+            <div class="day-jobtread-actions">
+                <span class="jobtread-icon jobtread-push" onclick="event.stopPropagation(); pushDayToJobTread('${dateKey}')" title="Push to JobTread">📤</span>
+                <span class="jobtread-icon jobtread-delete" onclick="event.stopPropagation(); deleteDayFromJobTread('${dateKey}')" title="Delete from JobTread">🗑️</span>
+            </div>
+        </th>`;
     });
 
     html += `</tr></thead><tbody>`;
