@@ -212,6 +212,11 @@ header p {
     gap: 0;
     overflow-x: auto;
     padding-left: 280px; /* Space for left tray */
+    transition: padding-left 0.3s ease;
+}
+
+.schedule-body.roster-collapsed {
+    padding-left: 0;
 }
 
 /* Left Roster Tray (Floating) */
@@ -612,6 +617,43 @@ header p {
 .col-day {
     min-width: 70px;
     font-size: 0.8em;
+    position: relative;
+}
+
+/* JobTread action icons in day headers */
+.day-jobtread-actions {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    margin-top: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.col-day:hover .day-jobtread-actions {
+    opacity: 1;
+}
+
+.jobtread-icon {
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+    display: inline-block;
+}
+
+.jobtread-icon:hover {
+    transform: scale(1.2);
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.jobtread-push:hover {
+    background: rgba(76, 175, 80, 0.3);
+}
+
+.jobtread-delete:hover {
+    background: rgba(244, 67, 54, 0.3);
 }
 
 .col-job-name {
