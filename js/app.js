@@ -800,12 +800,19 @@ function assignWorkerFromTypeahead() {
 
     // Assign the worker to primary cell
     const slotKey = `${primaryCell.jobId}_${primaryCell.dateKey}`;
-    const slot = dailySchedule[slotKey] || { demand: 0, assigned: [] };
+    if (!dailySchedule[slotKey]) {
+        dailySchedule[slotKey] = { demand: 0, assigned: [] };
+    }
+    const slot = dailySchedule[slotKey];
+
+    // Ensure assigned array exists
+    if (!Array.isArray(slot.assigned)) {
+        slot.assigned = [];
+    }
 
     // Check if already assigned
     if (!slot.assigned.includes(worker.id)) {
         slot.assigned.push(worker.id);
-        dailySchedule[slotKey] = slot;
         saveData();
     }
 
