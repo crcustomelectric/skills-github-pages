@@ -49,6 +49,7 @@ let jobColors = {}; // Map of jobId to color for crew board
 // Keyboard navigation state
 let selectedCells = []; // Array of selected cells: [{jobId, dateKey}, ...]
 let primaryCellIndex = 0; // Index of the primary selected cell (for typeahead, etc.)
+let lastClickedCell = null; // Last clicked cell for Shift+Click range selection
 let typeaheadBuffer = ''; // Buffer for typeahead search
 let typeaheadTimeout = null; // Timeout for clearing typeahead buffer
 let typeaheadResults = []; // Filtered workers from typeahead
@@ -381,7 +382,7 @@ document.addEventListener('keydown', function(e) {
             return;
         }
         // Then check if cell is selected
-        if (selectedCellJobId !== null) {
+        if (selectedCells.length > 0) {
             deselectCell();
             return;
         }
@@ -437,18 +438,22 @@ document.addEventListener('keydown', function(e) {
     }
 
     // Handle alphanumeric input for typeahead
-    if (selectedCellJobId !== null && e.key.length === 1 && /[a-zA-Z0-9 ]/.test(e.key)) {
+    if (selectedCells.length > 0 && e.key.length === 1 && /[a-zA-Z0-9 ]/.test(e.key)) {
         e.preventDefault();
         handleTypeahead(e.key);
         return;
     }
 
-    // Handle Backspace for typeahead
-    if (selectedCellJobId !== null && e.key === 'Backspace') {
+    // Handle Backspace - clear typeahead buffer or clear cell assignments
+    if (selectedCells.length > 0 && e.key === 'Backspace') {
         e.preventDefault();
         if (typeaheadBuffer) {
+            // If typing, remove last character
             typeaheadBuffer = typeaheadBuffer.slice(0, -1);
             updateTypeahead();
+        } else {
+            // If not typing, clear selected cells
+            clearSelectedCells();
         }
         return;
     }
@@ -503,6 +508,48 @@ function isCellSelected(jobId, dateKey) {
  */
 function getPrimaryCell() {
     return selectedCells[primaryCellIndex] || null;
+}
+
+/**
+ * Select a range of cells (Shift+Click)
+ */
+function selectCellRange(startJobId, startDateKey, endJobId, endDateKey) {
+    // Get all active jobs and dates
+    let activeJobs = jobs.filter(j => j.active);
+    if (divisionFilter !== 'both') {
+        activeJobs = activeJobs.filter(j => j.division === divisionFilter);
+    }
+    const dates = getScheduleDates();
+
+    // Find indices
+    const startJobIndex = activeJobs.findIndex(j => j.id === startJobId);
+    const endJobIndex = activeJobs.findIndex(j => j.id === endJobId);
+    const startDateIndex = dates.findIndex(d => getDateKey(d) === startDateKey);
+    const endDateIndex = dates.findIndex(d => getDateKey(d) === endDateKey);
+
+    if (startJobIndex === -1 || endJobIndex === -1 || startDateIndex === -1 || endDateIndex === -1) {
+        return; // Invalid range
+    }
+
+    // Determine the rectangle bounds
+    const minJobIndex = Math.min(startJobIndex, endJobIndex);
+    const maxJobIndex = Math.max(startJobIndex, endJobIndex);
+    const minDateIndex = Math.min(startDateIndex, endDateIndex);
+    const maxDateIndex = Math.max(startDateIndex, endDateIndex);
+
+    // Clear current selection and select all cells in range
+    selectedCells = [];
+    for (let jobIdx = minJobIndex; jobIdx <= maxJobIndex; jobIdx++) {
+        for (let dateIdx = minDateIndex; dateIdx <= maxDateIndex; dateIdx++) {
+            selectedCells.push({
+                jobId: activeJobs[jobIdx].id,
+                dateKey: getDateKey(dates[dateIdx])
+            });
+        }
+    }
+    primaryCellIndex = 0;
+
+    renderSchedule();
 }
 
 /**
@@ -777,6 +824,29 @@ function clearWeek(weekOffset) {
             if (dailySchedule[slotKey].assigned) {
                 dailySchedule[slotKey].assigned = [];
             }
+        }
+    });
+
+    saveData();
+    renderSchedule();
+}
+
+/**
+ * Clear assignments from all selected cells
+ */
+function clearSelectedCells() {
+    if (selectedCells.length === 0) return;
+
+    if (!confirm(`Clear worker assignments from ${selectedCells.length} selected cell${selectedCells.length > 1 ? 's' : ''}?`)) {
+        return;
+    }
+
+    saveStateForUndo();
+
+    selectedCells.forEach(cell => {
+        const slotKey = `${cell.jobId}_${cell.dateKey}`;
+        if (dailySchedule[slotKey]) {
+            dailySchedule[slotKey].assigned = [];
         }
     });
 
@@ -1332,7 +1402,8 @@ function setDivisionFilter(division) {
 function toggleMoreMenu() {
     const menu = document.getElementById('moreMenu');
     if (menu) {
-        const isVisible = menu.style.display !== 'none';
+        // Check computed style instead of inline style
+        const isVisible = window.getComputedStyle(menu).display !== 'none';
         menu.style.display = isVisible ? 'none' : 'block';
     }
 }
@@ -2423,10 +2494,15 @@ function handleCellClick(jobId, dateKey, event) {
 
     // Check for multi-selection modifiers
     const isMultiSelect = event && (event.ctrlKey || event.metaKey);
+    const isRangeSelect = event && event.shiftKey;
 
-    if (isMultiSelect) {
-        // Toggle this cell in the selection
+    if (isRangeSelect && lastClickedCell) {
+        // Shift+Click: Select range from last clicked cell to this cell
+        selectCellRange(lastClickedCell.jobId, lastClickedCell.dateKey, jobId, dateKey);
+    } else if (isMultiSelect) {
+        // Ctrl/Cmd+Click: Toggle this cell in the selection
         selectCell(jobId, dateKey, true);
+        lastClickedCell = {jobId, dateKey};
     } else {
         // Check if this cell is the only selected cell
         const isOnlySelected = selectedCells.length === 1 &&
@@ -2436,9 +2512,11 @@ function handleCellClick(jobId, dateKey, event) {
         if (isOnlySelected) {
             // Clicking the only selected cell - deselect all
             deselectCell();
+            lastClickedCell = null;
         } else {
             // Single select this cell
             selectCell(jobId, dateKey, false);
+            lastClickedCell = {jobId, dateKey};
         }
     }
 }
