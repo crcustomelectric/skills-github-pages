@@ -727,11 +727,7 @@ function handleTypeahead(char) {
     typeaheadBuffer += char;
     updateTypeahead();
 
-    // Reset timeout
-    if (typeaheadTimeout) clearTimeout(typeaheadTimeout);
-    typeaheadTimeout = setTimeout(() => {
-        clearTypeahead();
-    }, 3000); // Clear after 3 seconds of no typing
+    // No auto-clear timeout - user must press Escape to close
 }
 
 /**
