@@ -83,9 +83,126 @@ header p {
     gap: 10px;
     align-items: center;
     flex-wrap: wrap;
+    position: relative;
 }
 
-/* Division Filter Buttons */
+/* Header Controls */
+.header-controls {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+}
+
+.control-group {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.control-label {
+    font-size: 0.75em;
+    font-weight: 700;
+    color: white;
+    opacity: 0.9;
+    letter-spacing: 0.5px;
+}
+
+/* View Toggle Buttons */
+.view-toggle-group {
+    display: flex;
+    gap: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.view-toggle-btn {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85em;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.view-toggle-btn:last-child {
+    border-right: none;
+}
+
+.view-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.view-toggle-btn.active {
+    background: white;
+    color: var(--primary-blue);
+}
+
+/* Division Select Dropdown */
+.division-select {
+    background: white;
+    color: var(--primary-blue);
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85em;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+}
+
+.division-select:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.division-select:focus {
+    outline: 2px solid white;
+    outline-offset: 2px;
+}
+
+/* More Menu Dropdown */
+.more-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    min-width: 200px;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.more-menu .menu-item {
+    display: block;
+    width: 100%;
+    padding: 12px 16px;
+    background: white;
+    color: #333;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 500;
+    transition: background 0.2s ease;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.more-menu .menu-item:last-child {
+    border-bottom: none;
+}
+
+.more-menu .menu-item:hover {
+    background: #f5f5f5;
+}
+
+/* Division Filter Buttons (Legacy - keeping for backwards compatibility) */
 .division-filter-group {
     display: flex;
     gap: 0;
@@ -828,7 +945,7 @@ header p {
     border-radius: 4px;
     font-size: 0.85em;
     font-weight: 600;
-    color: white;
+    color: #333;
     white-space: nowrap;
 }
 
