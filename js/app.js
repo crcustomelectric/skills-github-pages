@@ -844,17 +844,19 @@ function toggleRosterTray() {
 }
 
 /**
- * Toggle between Job Board and Crew Board views
+ * Switch to a specific view (job or crew)
  */
-function toggleViewMode() {
-    viewMode = viewMode === 'job' ? 'crew' : 'job';
+function switchToView(view) {
+    viewMode = view;
     renderSchedule();
 
-    // Update button text
-    const btn = document.getElementById('viewModeBtn');
-    if (btn) {
-        btn.textContent = viewMode === 'job' ? '👷 Crew Board' : '📋 Job Board';
-        btn.title = viewMode === 'job' ? 'Switch to Crew Board (worker-centric)' : 'Switch to Job Board (job-centric)';
+    // Update button states
+    document.querySelectorAll('.view-toggle-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    const activeBtn = view === 'job' ? document.getElementById('jobViewBtn') : document.getElementById('workerViewBtn');
+    if (activeBtn) {
+        activeBtn.classList.add('active');
     }
 }
 
@@ -865,13 +867,21 @@ function setDivisionFilter(division) {
     divisionFilter = division;
     renderSchedule();
 
-    // Update button states
-    document.querySelectorAll('.division-filter-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    const activeBtn = document.querySelector(`[data-division="${division}"]`);
-    if (activeBtn) {
-        activeBtn.classList.add('active');
+    // Update select element
+    const select = document.getElementById('divisionSelect');
+    if (select) {
+        select.value = division;
+    }
+}
+
+/**
+ * Toggle the More menu dropdown
+ */
+function toggleMoreMenu() {
+    const menu = document.getElementById('moreMenu');
+    if (menu) {
+        const isVisible = menu.style.display !== 'none';
+        menu.style.display = isVisible ? 'none' : 'block';
     }
 }
 
@@ -1326,17 +1336,18 @@ function renderScheduleGrid(dates) {
  * Assign colors to jobs for crew board visualization
  */
 function assignJobColors() {
+    // Excel-like pastel colors optimized for dark text readability
     const colors = [
-        '#64B5F6', // Blue
-        '#FF8A65', // Orange
-        '#81C784', // Green
-        '#FFD54F', // Yellow
-        '#BA68C8', // Purple
-        '#4DD0E1', // Cyan
-        '#FF6384', // Pink
-        '#90A4AE', // Blue Grey
-        '#AED581', // Light Green
-        '#FFB74D'  // Light Orange
+        '#B4D7FF', // Light Blue
+        '#FFD9B3', // Light Orange
+        '#C5E1A5', // Light Green
+        '#FFF4B3', // Light Yellow
+        '#E1BEE7', // Light Purple
+        '#B2EBF2', // Light Cyan
+        '#FFCCDC', // Light Pink
+        '#CFD8DC', // Light Blue Grey
+        '#DCEDC8', // Pale Green
+        '#FFE0B2'  // Pale Orange
     ];
 
     jobs.forEach((job, index) => {
@@ -1439,11 +1450,11 @@ function renderCrewBoard(dates) {
                 const job = assignedJobs[0]; // For now, show first job
                 const color = jobColors[job.id];
                 cellContent = job.name;
-                cellStyle = `background-color: ${color}; color: white; font-weight: 600;`;
+                cellStyle = `background-color: ${color}; color: #333; font-weight: 600;`;
             } else {
                 // Worker not assigned
                 cellContent = '';
-                cellStyle = 'background-color: #f5f5f5;';
+                cellStyle = 'background-color: #f5f5f5; color: #333;';
             }
 
             html += `<td class="crew-day-cell" style="${cellStyle}" title="${cellContent}">${cellContent}</td>`;
@@ -3129,6 +3140,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add touch gesture listeners for swipe navigation
     document.addEventListener('touchstart', handleTouchStart, { passive: true });
     document.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    // Close more menu when clicking outside
+    document.addEventListener('click', function(e) {
+        const moreMenu = document.getElementById('moreMenu');
+        const moreMenuBtn = document.getElementById('moreMenuBtn');
+        if (moreMenu && moreMenuBtn && !moreMenu.contains(e.target) && !moreMenuBtn.contains(e.target)) {
+            moreMenu.style.display = 'none';
+        }
+    });
 
     // Then load data
     initializeData();
