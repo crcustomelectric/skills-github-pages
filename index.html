@@ -29,6 +29,12 @@
             <div class="header-actions">
                 <button class="add-btn" onclick="showAddWorkerModal()">+ Add Worker</button>
                 <button class="add-btn" onclick="showAddJobModal()">+ Add Job</button>
+                <button class="add-btn toggle-btn" id="viewModeBtn" onclick="toggleViewMode()" title="Switch to Crew Board (worker-centric)">👷 Crew Board</button>
+                <div class="division-filter-group">
+                    <button class="division-filter-btn active" data-division="commercial" onclick="setDivisionFilter('commercial')" title="Show Commercial only">Commercial</button>
+                    <button class="division-filter-btn" data-division="residential" onclick="setDivisionFilter('residential')" title="Show Residential only">Residential</button>
+                    <button class="division-filter-btn" data-division="both" onclick="setDivisionFilter('both')" title="Show All">Both</button>
+                </div>
                 <button class="add-btn toggle-btn" id="planningModeBtn" onclick="togglePlanningMode()" title="Toggle Planning Mode (PM view)">📋 Planning</button>
                 <button class="add-btn" onclick="toggleWeeklyOverview()" title="Show weekly worker allocation view">👷 Weekly Overview</button>
                 <button class="add-btn" onclick="showPrintModal()" title="Print schedule">🖨️ Print</button>

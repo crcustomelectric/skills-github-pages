@@ -41,6 +41,11 @@ let showSuggestions = true; // Show smart suggestions panel
 let selectedWorkerId = null; // For click-to-assign mode
 let activeDateKey = null; // For day-based roster filtering
 
+// View preferences
+let viewMode = 'job'; // 'job' or 'crew' board
+let divisionFilter = 'commercial'; // 'commercial', 'residential', or 'both'
+let jobColors = {}; // Map of jobId to color for crew board
+
 // Manpower tracking constants
 const ROLE_WEIGHTS = {
     'foreman': 1.3,      // 30% more productive (experienced, decision-maker)
@@ -761,7 +766,13 @@ function renderDesktopSchedule() {
     }
 
     renderRosterPanel();
-    renderScheduleGrid(dates);
+
+    // Render appropriate view based on mode
+    if (viewMode === 'crew') {
+        renderCrewBoard(dates);
+    } else {
+        renderScheduleGrid(dates);
+    }
 
     // Render insight badges in header
     renderInsightBadges();
@@ -829,6 +840,38 @@ function toggleRosterTray() {
         btn.title = 'Expand roster';
     } else {
         btn.title = 'Collapse roster';
+    }
+}
+
+/**
+ * Toggle between Job Board and Crew Board views
+ */
+function toggleViewMode() {
+    viewMode = viewMode === 'job' ? 'crew' : 'job';
+    renderSchedule();
+
+    // Update button text
+    const btn = document.getElementById('viewModeBtn');
+    if (btn) {
+        btn.textContent = viewMode === 'job' ? '👷 Crew Board' : '📋 Job Board';
+        btn.title = viewMode === 'job' ? 'Switch to Crew Board (worker-centric)' : 'Switch to Job Board (job-centric)';
+    }
+}
+
+/**
+ * Set division filter
+ */
+function setDivisionFilter(division) {
+    divisionFilter = division;
+    renderSchedule();
+
+    // Update button states
+    document.querySelectorAll('.division-filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    const activeBtn = document.querySelector(`[data-division="${division}"]`);
+    if (activeBtn) {
+        activeBtn.classList.add('active');
     }
 }
 
@@ -1278,6 +1321,149 @@ function renderScheduleGrid(dates) {
 // ============================================================================
 // Mobile View Rendering
 // ============================================================================
+
+/**
+ * Assign colors to jobs for crew board visualization
+ */
+function assignJobColors() {
+    const colors = [
+        '#64B5F6', // Blue
+        '#FF8A65', // Orange
+        '#81C784', // Green
+        '#FFD54F', // Yellow
+        '#BA68C8', // Purple
+        '#4DD0E1', // Cyan
+        '#FF6384', // Pink
+        '#90A4AE', // Blue Grey
+        '#AED581', // Light Green
+        '#FFB74D'  // Light Orange
+    ];
+
+    jobs.forEach((job, index) => {
+        if (!jobColors[job.id]) {
+            jobColors[job.id] = colors[index % colors.length];
+        }
+    });
+}
+
+/**
+ * Render Crew Board view (worker-centric)
+ */
+function renderCrewBoard(dates) {
+    assignJobColors();
+
+    const container = document.getElementById('scheduleGrid');
+    if (!container) return;
+
+    // Filter jobs based on division
+    let filteredJobs = jobs.filter(j => j.active);
+    if (divisionFilter !== 'both') {
+        filteredJobs = filteredJobs.filter(j => j.division === divisionFilter);
+    }
+
+    // Filter workers based on division
+    let filteredWorkers = workers;
+    if (divisionFilter !== 'both') {
+        filteredWorkers = workers.filter(w => w.division === divisionFilter || w.division === 'both');
+    }
+
+    // Sort workers: foremen first, then by name
+    filteredWorkers.sort((a, b) => {
+        if (a.isForeman && !b.isForeman) return -1;
+        if (!a.isForeman && b.isForeman) return 1;
+        return a.name.localeCompare(b.name);
+    });
+
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    let html = `<table class="schedule-table crew-board-table">
+        <thead>
+            <tr class="week-headers">
+                <th class="col-worker">Worker</th>`;
+
+    // Week headers
+    for (let week = 0; week < 3; week++) {
+        const weekStart = getWeekMonday(scheduleWeekOffset + week);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 5);
+        const weekLabel = `${formatDateShort(weekStart)} – ${formatDateShort(weekEnd)}`;
+        html += `<th class="col-week-header" colspan="6">${weekLabel}</th>`;
+    }
+
+    html += `</tr><tr class="day-headers">
+                <th class="col-worker"></th>`;
+
+    // Day headers
+    dates.forEach(date => {
+        const dayName = dayNames[date.getDay() === 0 ? 6 : date.getDay() - 1];
+        const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+        html += `<th class="col-day-crew">${dayName}<br><small>${dateStr}</small></th>`;
+    });
+
+    html += `</tr></thead><tbody>`;
+
+    // Render each worker as a row
+    filteredWorkers.forEach(worker => {
+        const foremanBadge = worker.isForeman ? ' <span class="foreman-star">★</span>' : '';
+        html += `<tr class="worker-row">
+            <td class="col-worker-name">
+                ${worker.name}${foremanBadge}
+                <div class="worker-role-badge badge-${worker.role}">${worker.role}</div>
+            </td>`;
+
+        // Render each day cell for this worker
+        dates.forEach(date => {
+            const dateKey = getDateKey(date);
+
+            // Find all jobs this worker is assigned to on this day
+            const assignedJobs = [];
+            Object.keys(dailySchedule).forEach(key => {
+                if (key.endsWith(`_${dateKey}`)) {
+                    const jobId = parseInt(key.split('_')[0]);
+                    const slot = dailySchedule[key];
+
+                    if (slot.assigned && slot.assigned.includes(worker.id)) {
+                        const job = filteredJobs.find(j => j.id === jobId);
+                        if (job) {
+                            assignedJobs.push(job);
+                        }
+                    }
+                }
+            });
+
+            let cellContent = '';
+            let cellStyle = '';
+
+            if (assignedJobs.length > 0) {
+                // Worker is assigned to job(s) on this day
+                const job = assignedJobs[0]; // For now, show first job
+                const color = jobColors[job.id];
+                cellContent = job.name;
+                cellStyle = `background-color: ${color}; color: white; font-weight: 600;`;
+            } else {
+                // Worker not assigned
+                cellContent = '';
+                cellStyle = 'background-color: #f5f5f5;';
+            }
+
+            html += `<td class="crew-day-cell" style="${cellStyle}" title="${cellContent}">${cellContent}</td>`;
+        });
+
+        html += `</tr>`;
+    });
+
+    html += `</tbody></table>`;
+
+    // Add legend
+    html += `<div class="crew-board-legend">`;
+    filteredJobs.forEach(job => {
+        const color = jobColors[job.id];
+        html += `<span class="legend-item" style="background-color: ${color};">${job.name}</span>`;
+    });
+    html += `</div>`;
+
+    container.innerHTML = html;
+}
 
 /**
  * Render mobile roster (collapsible)
@@ -2717,26 +2903,33 @@ async function callJobTreadAPI(query) {
     }
 
     try {
+        const requestBody = {
+            query: {
+                $: {
+                    grantKey: jobtreadGrantKey
+                },
+                ...query
+            }
+        };
+
+        console.log('JobTread API Request:', JSON.stringify(requestBody, null, 2));
+
         const response = await fetch('https://api.jobtread.com/pave', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                query: {
-                    $: {
-                        grantKey: jobtreadGrantKey
-                    },
-                    ...query
-                }
-            })
+            body: JSON.stringify(requestBody)
         });
 
+        const data = await response.json();
+        console.log('JobTread API Response:', data);
+
         if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
+            const errorMsg = data.error || data.message || JSON.stringify(data);
+            throw new Error(`API error ${response.status}: ${errorMsg}`);
         }
 
-        const data = await response.json();
         return data;
     } catch (error) {
         console.error('JobTread API error:', error);
@@ -2790,6 +2983,9 @@ async function pushDayToJobTread(dateKey) {
         const taskName = `[Man Loader] ${job.name} - ${dateStr}`;
         const taskDescription = `Crew: ${assignedWorkers}\n\nScheduled via Man Loader on ${new Date().toLocaleDateString()}`;
 
+        // Convert dateKey (YYYY_MM_DD) to ISO date format (YYYY-MM-DD)
+        const isoDate = dateKey.replace(/_/g, '-');
+
         try {
             // Create task in JobTread
             const result = await callJobTreadAPI({
@@ -2797,8 +2993,8 @@ async function pushDayToJobTread(dateKey) {
                     $create: {
                         name: taskName,
                         description: taskDescription,
-                        dueDate: dateKey,
-                        // assignees: assignedWorkers, // May need to map to JobTread user IDs
+                        dueDate: isoDate,
+                        // Note: May need jobId or other required fields
                     }
                 }
             });

@@ -81,6 +81,41 @@ header p {
 .header-actions {
     display: flex;
     gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* Division Filter Buttons */
+.division-filter-group {
+    display: flex;
+    gap: 0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.division-filter-btn {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 10px 16px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85em;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.division-filter-btn:last-child {
+    border-right: none;
+}
+
+.division-filter-btn:hover {
+    background: rgba(255, 255, 255, 0.4);
+}
+
+.division-filter-btn.active {
+    background: white;
+    color: var(--primary-blue);
 }
 
 .add-btn {
@@ -715,6 +750,86 @@ header p {
     background: #ffebee;
     color: #c62828;
     border: 1px solid #c62828;
+}
+
+/* Crew Board Styles */
+.crew-board-table .col-worker {
+    min-width: 150px;
+    text-align: left;
+    position: sticky;
+    left: 0;
+    background: var(--light-gray);
+    z-index: 13;
+}
+
+.col-worker-name {
+    background: white;
+    border: 1px solid var(--border-gray);
+    padding: 12px;
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    font-weight: 600;
+}
+
+.foreman-star {
+    color: #ff9800;
+    font-size: 1.1em;
+    margin-left: 4px;
+}
+
+.worker-role-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.7em;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-top: 4px;
+}
+
+.col-day-crew {
+    min-width: 80px;
+    font-size: 0.8em;
+}
+
+.crew-day-cell {
+    border: 1px solid var(--border-gray);
+    padding: 8px;
+    min-width: 80px;
+    min-height: 50px;
+    vertical-align: middle;
+    text-align: center;
+    font-size: 0.75em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.crew-day-cell:hover {
+    transform: scale(1.02);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    z-index: 1;
+}
+
+.crew-board-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 15px;
+    background: white;
+    border-top: 2px solid var(--border-gray);
+}
+
+.crew-board-legend .legend-item {
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    font-weight: 600;
+    color: white;
+    white-space: nowrap;
 }
 
 /* Schedule Cells */
