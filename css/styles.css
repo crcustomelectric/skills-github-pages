@@ -961,12 +961,11 @@ header p {
     border: 1px solid var(--border-gray);
     padding: 4px;
     min-width: 70px;
-    height: 80px;
-    max-height: 80px;
+    min-height: 60px;
     vertical-align: top;
     transition: all 0.2s ease;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
 }
 
 .schedule-cell.drag-over {
@@ -1113,8 +1112,6 @@ header p {
     flex-wrap: wrap;
     align-items: flex-start;
     gap: 2px;
-    max-height: 52px;
-    overflow-y: auto;
 }
 
 /* Cell Status Colors */
