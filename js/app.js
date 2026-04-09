@@ -46,6 +46,14 @@ let viewMode = 'job'; // 'job' or 'crew' board
 let divisionFilter = 'commercial'; // 'commercial', 'residential', or 'both'
 let jobColors = {}; // Map of jobId to color for crew board
 
+// Keyboard navigation state
+let selectedCellJobId = null; // Currently selected cell's job ID
+let selectedCellDateKey = null; // Currently selected cell's date key
+let typeaheadBuffer = ''; // Buffer for typeahead search
+let typeaheadTimeout = null; // Timeout for clearing typeahead buffer
+let typeaheadResults = []; // Filtered workers from typeahead
+let typeaheadSelectedIndex = 0; // Selected index in typeahead results
+
 // Manpower tracking constants
 const ROLE_WEIGHTS = {
     'foreman': 1.3,      // 30% more productive (experienced, decision-maker)
@@ -345,18 +353,283 @@ function showJobMenu(jobId, dateKey) {
 }
 
 /**
- * Close any modal with ESC key
+ * Keyboard event handler for modals and navigation
  */
 document.addEventListener('keydown', function(e) {
+    // Close modals with ESC
     if (e.key === 'Escape') {
+        // First check if typeahead is showing
+        if (typeaheadBuffer) {
+            clearTypeahead();
+            return;
+        }
+        // Then check if cell is selected
+        if (selectedCellJobId !== null) {
+            deselectCell();
+            return;
+        }
+        // Finally close modals
         closeAddWorkerModal();
         closeAddJobModal();
         closeConfirmModal();
         closePromptModal();
         closeEditJobModal();
         closePrintModal();
+        return;
+    }
+
+    // Ignore keyboard navigation if modal is open
+    if (document.querySelector('.modal.active')) {
+        return;
+    }
+
+    // Handle keyboard navigation (arrow keys)
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault();
+        handleArrowKey(e.key);
+        return;
+    }
+
+    // Handle Enter key (assign worker from typeahead or toggle selection)
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        if (typeaheadResults.length > 0) {
+            assignWorkerFromTypeahead();
+        }
+        return;
+    }
+
+    // Handle Command/Ctrl + R (copy across row)
+    if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+        e.preventDefault();
+        copyAssignmentAcrossWeek();
+        return;
+    }
+
+    // Handle alphanumeric input for typeahead
+    if (selectedCellJobId !== null && e.key.length === 1 && /[a-zA-Z0-9 ]/.test(e.key)) {
+        e.preventDefault();
+        handleTypeahead(e.key);
+        return;
+    }
+
+    // Handle Backspace for typeahead
+    if (selectedCellJobId !== null && e.key === 'Backspace') {
+        e.preventDefault();
+        if (typeaheadBuffer) {
+            typeaheadBuffer = typeaheadBuffer.slice(0, -1);
+            updateTypeahead();
+        }
+        return;
     }
 });
+
+// ============================================================================
+// Keyboard Navigation Functions
+// ============================================================================
+
+/**
+ * Select a cell for keyboard navigation
+ */
+function selectCell(jobId, dateKey) {
+    selectedCellJobId = jobId;
+    selectedCellDateKey = dateKey;
+    renderSchedule();
+}
+
+/**
+ * Deselect the currently selected cell
+ */
+function deselectCell() {
+    selectedCellJobId = null;
+    selectedCellDateKey = null;
+    clearTypeahead();
+    renderSchedule();
+}
+
+/**
+ * Handle arrow key navigation
+ */
+function handleArrowKey(key) {
+    const activeJobs = jobs.filter(j => j.active);
+    if (activeJobs.length === 0) return;
+
+    const dates = getScheduleDates();
+
+    // If no cell selected, select the first cell
+    if (selectedCellJobId === null) {
+        selectCell(activeJobs[0].id, getDateKey(dates[0]));
+        return;
+    }
+
+    // Find current position
+    const jobIndex = activeJobs.findIndex(j => j.id === selectedCellJobId);
+    const dateIndex = dates.findIndex(d => getDateKey(d) === selectedCellDateKey);
+
+    if (jobIndex === -1 || dateIndex === -1) {
+        // Invalid state, reset
+        selectCell(activeJobs[0].id, getDateKey(dates[0]));
+        return;
+    }
+
+    let newJobIndex = jobIndex;
+    let newDateIndex = dateIndex;
+
+    switch (key) {
+        case 'ArrowUp':
+            newJobIndex = Math.max(0, jobIndex - 1);
+            break;
+        case 'ArrowDown':
+            newJobIndex = Math.min(activeJobs.length - 1, jobIndex + 1);
+            break;
+        case 'ArrowLeft':
+            newDateIndex = Math.max(0, dateIndex - 1);
+            break;
+        case 'ArrowRight':
+            newDateIndex = Math.min(dates.length - 1, dateIndex + 1);
+            break;
+    }
+
+    selectCell(activeJobs[newJobIndex].id, getDateKey(dates[newDateIndex]));
+
+    // Scroll selected cell into view
+    scrollCellIntoView(activeJobs[newJobIndex].id, getDateKey(dates[newDateIndex]));
+}
+
+/**
+ * Scroll selected cell into view
+ */
+function scrollCellIntoView(jobId, dateKey) {
+    setTimeout(() => {
+        const cell = document.querySelector(`.schedule-cell[data-job-id="${jobId}"][data-date-key="${dateKey}"]`);
+        if (cell) {
+            cell.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        }
+    }, 50);
+}
+
+/**
+ * Handle typeahead input
+ */
+function handleTypeahead(char) {
+    typeaheadBuffer += char;
+    updateTypeahead();
+
+    // Reset timeout
+    if (typeaheadTimeout) clearTimeout(typeaheadTimeout);
+    typeaheadTimeout = setTimeout(() => {
+        clearTypeahead();
+    }, 3000); // Clear after 3 seconds of no typing
+}
+
+/**
+ * Update typeahead results
+ */
+function updateTypeahead() {
+    if (!typeaheadBuffer) {
+        typeaheadResults = [];
+        typeaheadSelectedIndex = 0;
+        renderSchedule();
+        return;
+    }
+
+    // Filter workers by name (case-insensitive)
+    const searchLower = typeaheadBuffer.toLowerCase();
+    typeaheadResults = workers.filter(w =>
+        w.name.toLowerCase().includes(searchLower)
+    );
+    typeaheadSelectedIndex = 0;
+
+    renderSchedule();
+}
+
+/**
+ * Clear typeahead state
+ */
+function clearTypeahead() {
+    typeaheadBuffer = '';
+    typeaheadResults = [];
+    typeaheadSelectedIndex = 0;
+    if (typeaheadTimeout) clearTimeout(typeaheadTimeout);
+    typeaheadTimeout = null;
+    renderSchedule();
+}
+
+/**
+ * Assign worker from typeahead selection
+ */
+function assignWorkerFromTypeahead() {
+    if (typeaheadResults.length === 0 || selectedCellJobId === null) return;
+
+    const worker = typeaheadResults[typeaheadSelectedIndex];
+    if (!worker) return;
+
+    // Assign the worker
+    const slotKey = `${selectedCellJobId}_${selectedCellDateKey}`;
+    const slot = dailySchedule[slotKey] || { demand: 0, assigned: [] };
+
+    // Check if already assigned
+    if (!slot.assigned.includes(worker.id)) {
+        slot.assigned.push(worker.id);
+        dailySchedule[slotKey] = slot;
+        saveData();
+    }
+
+    clearTypeahead();
+    renderSchedule();
+}
+
+/**
+ * Copy assignments across the entire week
+ */
+function copyAssignmentAcrossWeek() {
+    if (selectedCellJobId === null || selectedCellDateKey === null) return;
+
+    const slotKey = `${selectedCellJobId}_${selectedCellDateKey}`;
+    const sourceSlot = dailySchedule[slotKey];
+    if (!sourceSlot || !sourceSlot.assigned || sourceSlot.assigned.length === 0) {
+        return; // Nothing to copy
+    }
+
+    // Find which week this date belongs to
+    const dates = getScheduleDates();
+    const sourceDate = dates.find(d => getDateKey(d) === selectedCellDateKey);
+    if (!sourceDate) return;
+
+    const sourceDayOfWeek = sourceDate.getDay();
+
+    // Copy to all days in the 3-week view
+    dates.forEach(date => {
+        const dateKey = getDateKey(date);
+        if (dateKey === selectedCellDateKey) return; // Skip source
+
+        const targetSlotKey = `${selectedCellJobId}_${dateKey}`;
+        const targetSlot = dailySchedule[targetSlotKey] || { demand: 0, assigned: [] };
+
+        // Copy the workers
+        targetSlot.assigned = [...sourceSlot.assigned];
+        dailySchedule[targetSlotKey] = targetSlot;
+    });
+
+    saveData();
+    renderSchedule();
+}
+
+/**
+ * Get schedule dates (helper)
+ */
+function getScheduleDates() {
+    const dates = [];
+    for (let week = 0; week < 3; week++) {
+        const weekStart = getWeekMonday(scheduleWeekOffset + week);
+        for (let day = 0; day < 6; day++) {
+            const date = new Date(weekStart);
+            date.setDate(weekStart.getDate() + day);
+            dates.push(date);
+        }
+    }
+    return dates;
+}
 
 // ============================================================================
 // Form Event Handlers
@@ -1084,13 +1357,29 @@ function renderScheduleGrid(dates) {
     html += `</tr><tr class="day-headers">
                 <th class="col-job"></th>`;
 
-    // Day headers (18 columns = 3 weeks × 6 days) with dates - clickable for filtering
+    // Day headers (18 columns = 3 weeks × 6 days) with dates - green when fully staffed
     dates.forEach(date => {
         const dayName = dayNames[date.getDay() === 0 ? 6 : date.getDay() - 1];
         const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
         const dateKey = getDateKey(date);
         const activeClass = activeDateKey === dateKey ? 'day-active' : '';
-        html += `<th class="col-day ${activeClass}" onclick="activateDay('${dateKey}', this)" style="cursor: pointer;" title="Click to filter available workers">
+
+        // Check if this day is fully staffed
+        let totalNeeded = 0;
+        const assignedWorkerIds = new Set();
+        Object.keys(dailySchedule).forEach(key => {
+            if (key.endsWith(`_${dateKey}`)) {
+                const slot = dailySchedule[key];
+                totalNeeded += parseInt(slot.demand) || 0;
+                if (slot.assigned) {
+                    slot.assigned.forEach(wId => assignedWorkerIds.add(wId));
+                }
+            }
+        });
+        const isFullyStaffed = totalNeeded > 0 && assignedWorkerIds.size >= totalNeeded;
+        const fullyStaffedClass = isFullyStaffed ? 'day-fully-staffed' : '';
+
+        html += `<th class="col-day ${activeClass} ${fullyStaffedClass}" onclick="activateDay('${dateKey}', this)" style="cursor: pointer;" title="Click to filter available workers">
             ${dayName}<br><small>${dateStr}</small>
             <div class="day-jobtread-actions">
                 <span class="jobtread-icon jobtread-push" onclick="event.stopPropagation(); pushDayToJobTread('${dateKey}')" title="Push to JobTread">📤</span>
@@ -1252,14 +1541,18 @@ function renderScheduleGrid(dates) {
 
                 const assignedWorkers = assigned.map(id => workers.find(w => w.id === id)).filter(Boolean);
 
-                html += `<td class="schedule-cell ${statusClass} ${selectedWorkerId ? 'click-assign-mode' : ''}"
+                // Check if this cell is selected
+                const isSelected = selectedCellJobId === job.id && selectedCellDateKey === dateKey;
+                const selectedClass = isSelected ? 'cell-selected' : '';
+
+                html += `<td class="schedule-cell ${statusClass} ${selectedClass} ${selectedWorkerId ? 'click-assign-mode' : ''}"
                              data-job-id="${job.id}"
                              data-date-key="${dateKey}"
                              ondragover="handleCellDragOver(event, ${job.id}, '${dateKey}')"
                              ondragleave="this.classList.remove('drag-over')"
                              ondrop="handleCellDrop(event, ${job.id}, '${dateKey}')"
-                             onclick="clickAssignWorker(${job.id}, '${dateKey}')"
-                             title="${selectedWorkerId ? 'Click to assign selected worker' : 'Drag worker here or click worker first'}">
+                             onclick="handleCellClick(${job.id}, '${dateKey}')"
+                             title="Click to select, type to search workers, Enter to assign">
                     <div class="cell-demand-row">
                         <input type="number" class="demand-input" value="${demand}" min="0" max="9"
                                onchange="setDemand(${job.id}, '${dateKey}', this.value)"
@@ -1273,9 +1566,9 @@ function renderScheduleGrid(dates) {
                                 <div class="worker-chip-mini worker-chip-${w.role}"
                                      draggable="true"
                                      ondragstart="dragWorkerStart(event, ${w.id}, ${job.id}, '${dateKey}')"
-                                     title="${w.name}">
+                                     onclick="removeScheduleWorker(${job.id}, '${dateKey}', ${w.id}); event.stopPropagation();"
+                                     title="${w.name} (click to remove)">
                                     <span class="chip-name-mini">${w.name.split(' ')[0]}</span>
-                                    <button class="chip-remove" onclick="removeScheduleWorker(${job.id}, '${dateKey}', ${w.id}); event.stopPropagation()">×</button>
                                 </div>
                             `).join('')}
                         </div>
@@ -1286,6 +1579,17 @@ function renderScheduleGrid(dates) {
                                  ondragend="endCrewCopy(event)"
                                  title="Drag to copy crew across days ⇒">
                                 ⇒
+                            </div>
+                        ` : ''}
+                        ${isSelected && typeaheadResults.length > 0 ? `
+                            <div class="typeahead-dropdown">
+                                <div class="typeahead-header">Search: "${typeaheadBuffer}"</div>
+                                ${typeaheadResults.map((w, idx) => `
+                                    <div class="typeahead-item ${idx === typeaheadSelectedIndex ? 'selected' : ''}"
+                                         onclick="assignWorkerFromTypeahead(); event.stopPropagation();">
+                                        ${w.name} <span class="typeahead-role">(${w.role})</span>
+                                    </div>
+                                `).join('')}
                             </div>
                         ` : ''}
                     ` : ''}
@@ -1917,6 +2221,26 @@ function toggleWorkerSelection(workerId) {
         selectedWorkerId = workerId;
     }
     renderSchedule();
+}
+
+/**
+ * Handle cell click for keyboard navigation
+ */
+function handleCellClick(jobId, dateKey) {
+    // If there's a selected worker (old click-to-assign mode), use that
+    if (selectedWorkerId) {
+        clickAssignWorker(jobId, dateKey);
+        return;
+    }
+
+    // Otherwise, select/deselect the cell for keyboard navigation
+    if (selectedCellJobId === jobId && selectedCellDateKey === dateKey) {
+        // Clicking same cell - deselect
+        deselectCell();
+    } else {
+        // Select this cell
+        selectCell(jobId, dateKey);
+    }
 }
 
 /**
