@@ -47,12 +47,16 @@ let divisionFilter = 'commercial'; // 'commercial', 'residential', or 'both'
 let jobColors = {}; // Map of jobId to color for crew board
 
 // Keyboard navigation state
-let selectedCellJobId = null; // Currently selected cell's job ID
-let selectedCellDateKey = null; // Currently selected cell's date key
+let selectedCells = []; // Array of selected cells: [{jobId, dateKey}, ...]
+let primaryCellIndex = 0; // Index of the primary selected cell (for typeahead, etc.)
 let typeaheadBuffer = ''; // Buffer for typeahead search
 let typeaheadTimeout = null; // Timeout for clearing typeahead buffer
 let typeaheadResults = []; // Filtered workers from typeahead
 let typeaheadSelectedIndex = 0; // Selected index in typeahead results
+
+// Undo stack
+let undoStack = []; // Stack of previous states
+const MAX_UNDO_STACK = 50; // Maximum undo history
 
 // Manpower tracking constants
 const ROLE_WEIGHTS = {
@@ -399,10 +403,17 @@ document.addEventListener('keydown', function(e) {
         return;
     }
 
-    // Handle Command/Ctrl + R (copy across row)
+    // Handle Command/Ctrl + R (copy to selected cells)
     if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
         e.preventDefault();
         copyAssignmentAcrossWeek();
+        return;
+    }
+
+    // Handle Command/Ctrl + Z (undo)
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault();
+        performUndo();
         return;
     }
 
@@ -431,20 +442,48 @@ document.addEventListener('keydown', function(e) {
 /**
  * Select a cell for keyboard navigation
  */
-function selectCell(jobId, dateKey) {
-    selectedCellJobId = jobId;
-    selectedCellDateKey = dateKey;
+function selectCell(jobId, dateKey, addToSelection = false) {
+    if (!addToSelection) {
+        // Single selection - replace all
+        selectedCells = [{jobId, dateKey}];
+        primaryCellIndex = 0;
+    } else {
+        // Check if already selected
+        const existingIndex = selectedCells.findIndex(c => c.jobId === jobId && c.dateKey === dateKey);
+        if (existingIndex >= 0) {
+            // Already selected - remove it (toggle)
+            selectedCells.splice(existingIndex, 1);
+            primaryCellIndex = Math.min(primaryCellIndex, Math.max(0, selectedCells.length - 1));
+        } else {
+            // Add to selection
+            selectedCells.push({jobId, dateKey});
+        }
+    }
     renderSchedule();
 }
 
 /**
- * Deselect the currently selected cell
+ * Deselect all cells
  */
 function deselectCell() {
-    selectedCellJobId = null;
-    selectedCellDateKey = null;
+    selectedCells = [];
+    primaryCellIndex = 0;
     clearTypeahead();
     renderSchedule();
+}
+
+/**
+ * Check if a cell is selected
+ */
+function isCellSelected(jobId, dateKey) {
+    return selectedCells.some(c => c.jobId === jobId && c.dateKey === dateKey);
+}
+
+/**
+ * Get the primary selected cell
+ */
+function getPrimaryCell() {
+    return selectedCells[primaryCellIndex] || null;
 }
 
 /**
@@ -457,14 +496,21 @@ function handleArrowKey(key) {
     const dates = getScheduleDates();
 
     // If no cell selected, select the first cell
-    if (selectedCellJobId === null) {
+    if (selectedCells.length === 0) {
+        selectCell(activeJobs[0].id, getDateKey(dates[0]));
+        return;
+    }
+
+    // Get primary selected cell
+    const primaryCell = getPrimaryCell();
+    if (!primaryCell) {
         selectCell(activeJobs[0].id, getDateKey(dates[0]));
         return;
     }
 
     // Find current position
-    const jobIndex = activeJobs.findIndex(j => j.id === selectedCellJobId);
-    const dateIndex = dates.findIndex(d => getDateKey(d) === selectedCellDateKey);
+    const jobIndex = activeJobs.findIndex(j => j.id === primaryCell.jobId);
+    const dateIndex = dates.findIndex(d => getDateKey(d) === primaryCell.dateKey);
 
     if (jobIndex === -1 || dateIndex === -1) {
         // Invalid state, reset
@@ -559,13 +605,20 @@ function clearTypeahead() {
  * Assign worker from typeahead selection
  */
 function assignWorkerFromTypeahead() {
-    if (typeaheadResults.length === 0 || selectedCellJobId === null) return;
+    if (typeaheadResults.length === 0 || selectedCells.length === 0) return;
 
     const worker = typeaheadResults[typeaheadSelectedIndex];
     if (!worker) return;
 
-    // Assign the worker
-    const slotKey = `${selectedCellJobId}_${selectedCellDateKey}`;
+    // Save state for undo
+    saveStateForUndo();
+
+    // Get primary cell
+    const primaryCell = getPrimaryCell();
+    if (!primaryCell) return;
+
+    // Assign the worker to primary cell
+    const slotKey = `${primaryCell.jobId}_${primaryCell.dateKey}`;
     const slot = dailySchedule[slotKey] || { demand: 0, assigned: [] };
 
     // Check if already assigned
@@ -580,36 +633,33 @@ function assignWorkerFromTypeahead() {
 }
 
 /**
- * Copy assignments across the entire week
+ * Copy assignments from first selected cell to all other selected cells
  */
 function copyAssignmentAcrossWeek() {
-    if (selectedCellJobId === null || selectedCellDateKey === null) return;
+    if (selectedCells.length < 2) return; // Need at least 2 cells selected
 
-    const slotKey = `${selectedCellJobId}_${selectedCellDateKey}`;
-    const sourceSlot = dailySchedule[slotKey];
+    // Save state for undo
+    saveStateForUndo();
+
+    // Get the source cell (first selected)
+    const sourceCell = selectedCells[0];
+    const sourceSlotKey = `${sourceCell.jobId}_${sourceCell.dateKey}`;
+    const sourceSlot = dailySchedule[sourceSlotKey];
+
     if (!sourceSlot || !sourceSlot.assigned || sourceSlot.assigned.length === 0) {
         return; // Nothing to copy
     }
 
-    // Find which week this date belongs to
-    const dates = getScheduleDates();
-    const sourceDate = dates.find(d => getDateKey(d) === selectedCellDateKey);
-    if (!sourceDate) return;
-
-    const sourceDayOfWeek = sourceDate.getDay();
-
-    // Copy to all days in the 3-week view
-    dates.forEach(date => {
-        const dateKey = getDateKey(date);
-        if (dateKey === selectedCellDateKey) return; // Skip source
-
-        const targetSlotKey = `${selectedCellJobId}_${dateKey}`;
+    // Copy to all other selected cells
+    for (let i = 1; i < selectedCells.length; i++) {
+        const targetCell = selectedCells[i];
+        const targetSlotKey = `${targetCell.jobId}_${targetCell.dateKey}`;
         const targetSlot = dailySchedule[targetSlotKey] || { demand: 0, assigned: [] };
 
         // Copy the workers
         targetSlot.assigned = [...sourceSlot.assigned];
         dailySchedule[targetSlotKey] = targetSlot;
-    });
+    }
 
     saveData();
     renderSchedule();
@@ -629,6 +679,36 @@ function getScheduleDates() {
         }
     }
     return dates;
+}
+
+/**
+ * Save current state to undo stack
+ */
+function saveStateForUndo() {
+    // Deep clone the current daily schedule
+    const state = JSON.parse(JSON.stringify(dailySchedule));
+    undoStack.push(state);
+
+    // Limit stack size
+    if (undoStack.length > MAX_UNDO_STACK) {
+        undoStack.shift(); // Remove oldest state
+    }
+}
+
+/**
+ * Undo last change
+ */
+function performUndo() {
+    if (undoStack.length === 0) return;
+
+    // Pop the last state
+    const previousState = undoStack.pop();
+
+    // Restore it
+    dailySchedule = previousState;
+
+    saveData();
+    renderSchedule();
 }
 
 // ============================================================================
@@ -1306,8 +1386,12 @@ function renderScheduleGrid(dates) {
         return;
     }
 
-    const activeJobs = jobs.filter(j => j.active);
-    console.log(`Rendering schedule with ${activeJobs.length} active jobs and ${workers.length} workers`);
+    // Filter by active and division
+    let activeJobs = jobs.filter(j => j.active);
+    if (divisionFilter !== 'both') {
+        activeJobs = activeJobs.filter(j => j.division === divisionFilter);
+    }
+    console.log(`Rendering schedule with ${activeJobs.length} active jobs (division: ${divisionFilter}) and ${workers.length} workers`);
 
     // Build table header with daily columns
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -1542,8 +1626,9 @@ function renderScheduleGrid(dates) {
                 const assignedWorkers = assigned.map(id => workers.find(w => w.id === id)).filter(Boolean);
 
                 // Check if this cell is selected
-                const isSelected = selectedCellJobId === job.id && selectedCellDateKey === dateKey;
+                const isSelected = isCellSelected(job.id, dateKey);
                 const selectedClass = isSelected ? 'cell-selected' : '';
+                const isPrimaryCell = getPrimaryCell() && getPrimaryCell().jobId === job.id && getPrimaryCell().dateKey === dateKey;
 
                 html += `<td class="schedule-cell ${statusClass} ${selectedClass} ${selectedWorkerId ? 'click-assign-mode' : ''}"
                              data-job-id="${job.id}"
@@ -1551,8 +1636,8 @@ function renderScheduleGrid(dates) {
                              ondragover="handleCellDragOver(event, ${job.id}, '${dateKey}')"
                              ondragleave="this.classList.remove('drag-over')"
                              ondrop="handleCellDrop(event, ${job.id}, '${dateKey}')"
-                             onclick="handleCellClick(${job.id}, '${dateKey}')"
-                             title="Click to select, type to search workers, Enter to assign">
+                             onclick="handleCellClick(${job.id}, '${dateKey}', event)"
+                             title="Click to select, Ctrl/Cmd+Click for multiple, type to search, Cmd+R to copy">
                     <div class="cell-demand-row">
                         <input type="number" class="demand-input" value="${demand}" min="0" max="9"
                                onchange="setDemand(${job.id}, '${dateKey}', this.value)"
@@ -1581,7 +1666,7 @@ function renderScheduleGrid(dates) {
                                 ⇒
                             </div>
                         ` : ''}
-                        ${isSelected && typeaheadResults.length > 0 ? `
+                        ${isPrimaryCell && typeaheadResults.length > 0 ? `
                             <div class="typeahead-dropdown">
                                 <div class="typeahead-header">Search: "${typeaheadBuffer}"</div>
                                 ${typeaheadResults.map((w, idx) => `
@@ -2090,6 +2175,8 @@ function dropWorkerToCell(event, jobId, dateKey) {
 
     if (!draggingWorkerId) return;
 
+    saveStateForUndo();
+
     const slotKey = `${jobId}_${dateKey}`;
     if (!dailySchedule[slotKey]) dailySchedule[slotKey] = { demand: 0, assigned: [] };
     if (!Array.isArray(dailySchedule[slotKey].assigned)) dailySchedule[slotKey].assigned = [];
@@ -2189,6 +2276,7 @@ function removeVacation(workerId, dateKey) {
 }
 
 function setDemand(jobId, dateKey, value) {
+    saveStateForUndo();
     const slotKey = `${jobId}_${dateKey}`;
     if (!dailySchedule[slotKey]) dailySchedule[slotKey] = { demand: 0, assigned: [] };
     dailySchedule[slotKey].demand = parseInt(value) || 0;
@@ -2197,6 +2285,7 @@ function setDemand(jobId, dateKey, value) {
 }
 
 function removeScheduleWorker(jobId, dateKey, workerId) {
+    saveStateForUndo();
     const slotKey = `${jobId}_${dateKey}`;
     if (dailySchedule[slotKey]) {
         dailySchedule[slotKey].assigned = dailySchedule[slotKey].assigned.filter(id => id !== workerId);
@@ -2226,20 +2315,32 @@ function toggleWorkerSelection(workerId) {
 /**
  * Handle cell click for keyboard navigation
  */
-function handleCellClick(jobId, dateKey) {
+function handleCellClick(jobId, dateKey, event) {
     // If there's a selected worker (old click-to-assign mode), use that
     if (selectedWorkerId) {
         clickAssignWorker(jobId, dateKey);
         return;
     }
 
-    // Otherwise, select/deselect the cell for keyboard navigation
-    if (selectedCellJobId === jobId && selectedCellDateKey === dateKey) {
-        // Clicking same cell - deselect
-        deselectCell();
+    // Check for multi-selection modifiers
+    const isMultiSelect = event && (event.ctrlKey || event.metaKey);
+
+    if (isMultiSelect) {
+        // Toggle this cell in the selection
+        selectCell(jobId, dateKey, true);
     } else {
-        // Select this cell
-        selectCell(jobId, dateKey);
+        // Check if this cell is the only selected cell
+        const isOnlySelected = selectedCells.length === 1 &&
+                               selectedCells[0].jobId === jobId &&
+                               selectedCells[0].dateKey === dateKey;
+
+        if (isOnlySelected) {
+            // Clicking the only selected cell - deselect all
+            deselectCell();
+        } else {
+            // Single select this cell
+            selectCell(jobId, dateKey, false);
+        }
     }
 }
 
@@ -2342,6 +2443,7 @@ function handleCellDrop(event, jobId, dateKey) {
 
     // Check if we're in crew copy mode
     if (copyingCrewFromJob !== null && copyingCrewFromJob === jobId) {
+        saveStateForUndo();
         // Crew copy mode - copy all workers from source to target
         const slotKey = `${jobId}_${dateKey}`;
         if (!dailySchedule[slotKey]) dailySchedule[slotKey] = { demand: 0, assigned: [] };
