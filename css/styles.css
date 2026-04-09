@@ -668,38 +668,29 @@ header p {
     background: white;
     border: 1px solid var(--border-gray);
     border-radius: 4px;
-    padding: 4px 6px;
-    cursor: grab;
+    padding: 4px 8px;
+    cursor: pointer;
     display: inline-flex;
     align-items: center;
     gap: 4px;
     margin: 2px;
     font-size: 0.75em;
+    transition: all 0.2s ease;
+}
+
+.worker-chip-mini:hover {
+    background: #ffebee;
+    border-color: #dc3545;
+    transform: translateY(-1px);
 }
 
 .chip-name-mini {
     font-weight: 600;
 }
 
+/* Chip remove button - hidden, chip itself is clickable now */
 .chip-remove {
-    background: #dc3545;
-    color: white;
-    border: none;
-    border-radius: 3px;
-    width: 16px;
-    height: 16px;
-    cursor: pointer;
-    padding: 0;
-    margin: 0;
-    font-size: 12px;
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.chip-remove:hover {
-    background: #c82333;
+    display: none;
 }
 
 /* Schedule Grid Container */
@@ -770,6 +761,18 @@ header p {
     min-width: 70px;
     font-size: 0.8em;
     position: relative;
+    transition: background 0.3s ease;
+}
+
+/* Day header when fully staffed */
+.col-day.day-fully-staffed {
+    background: linear-gradient(135deg, #4CAF50 0%, #66BB6A 100%);
+    color: white;
+    font-weight: 600;
+}
+
+.col-day.day-fully-staffed small {
+    color: rgba(255, 255, 255, 0.9);
 }
 
 /* JobTread action icons in day headers */
@@ -952,17 +955,26 @@ header p {
 /* Schedule Cells */
 .schedule-cell {
     border: 1px solid var(--border-gray);
-    padding: 6px;
+    padding: 4px;
     min-width: 70px;
-    min-height: 60px;
+    height: 80px;
+    max-height: 80px;
     vertical-align: top;
-    transition: background 0.2s ease;
+    transition: all 0.2s ease;
     position: relative;
+    overflow: hidden;
 }
 
 .schedule-cell.drag-over {
     background: #bbdefb !important;
     border-color: var(--primary-blue);
+}
+
+/* Selected cell (keyboard navigation) */
+.schedule-cell.cell-selected {
+    box-shadow: 0 0 0 3px var(--primary-blue);
+    border-color: var(--primary-blue);
+    z-index: 10;
 }
 
 /* Crew Copy Handle */
@@ -1016,6 +1028,50 @@ header p {
     50% { opacity: 0.7; }
 }
 
+/* Typeahead Dropdown */
+.typeahead-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 2px solid var(--primary-blue);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 100;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 2px;
+}
+
+.typeahead-header {
+    padding: 6px 8px;
+    background: #f5f5f5;
+    border-bottom: 1px solid var(--border-gray);
+    font-size: 0.7em;
+    font-weight: 600;
+    color: #666;
+}
+
+.typeahead-item {
+    padding: 8px;
+    cursor: pointer;
+    font-size: 0.8em;
+    border-bottom: 1px solid #f0f0f0;
+    transition: background 0.2s ease;
+}
+
+.typeahead-item:hover,
+.typeahead-item.selected {
+    background: #e3f2fd;
+}
+
+.typeahead-role {
+    color: #666;
+    font-size: 0.9em;
+    margin-left: 4px;
+}
+
 /* Click-to-Assign Mode */
 .click-assign-mode {
     cursor: pointer;
@@ -1028,30 +1084,32 @@ header p {
 .cell-demand-row {
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin-bottom: 4px;
+    gap: 3px;
+    margin-bottom: 3px;
 }
 
 .demand-input {
-    width: 40px;
-    padding: 2px 4px;
+    width: 32px;
+    padding: 2px;
     border: 1px solid var(--border-gray);
     border-radius: 3px;
-    font-size: 0.85em;
+    font-size: 0.8em;
     text-align: center;
 }
 
 .assigned-count {
-    font-size: 0.75em;
+    font-size: 0.7em;
     color: #666;
     margin-left: auto;
 }
 
 .cell-workers {
-    min-height: 30px;
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
+    gap: 2px;
+    max-height: 52px;
+    overflow-y: auto;
 }
 
 /* Cell Status Colors */
