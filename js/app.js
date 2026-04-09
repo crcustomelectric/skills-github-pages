@@ -50,6 +50,7 @@ let jobColors = {}; // Map of jobId to color for crew board
 let selectedCells = []; // Array of selected cells: [{jobId, dateKey}, ...]
 let primaryCellIndex = 0; // Index of the primary selected cell (for typeahead, etc.)
 let lastClickedCell = null; // Last clicked cell for Shift+Click range selection
+let selectionAnchor = null; // Anchor cell for Shift+Arrow selection
 let typeaheadBuffer = ''; // Buffer for typeahead search
 let typeaheadTimeout = null; // Timeout for clearing typeahead buffer
 let typeaheadResults = []; // Filtered workers from typeahead
@@ -408,7 +409,11 @@ document.addEventListener('keydown', function(e) {
         // If typeahead is active and we're pressing up/down, navigate typeahead
         if (typeaheadResults.length > 0 && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
             navigateTypeahead(e.key);
+        } else if (e.shiftKey) {
+            // Shift+Arrow: Extend selection (like Excel)
+            extendSelectionWithArrow(e.key);
         } else {
+            // Regular arrow: Move selection
             handleArrowKey(e.key);
         }
         return;
@@ -492,6 +497,7 @@ function selectCell(jobId, dateKey, addToSelection = false) {
 function deselectCell() {
     selectedCells = [];
     primaryCellIndex = 0;
+    selectionAnchor = null;
     clearTypeahead();
     renderSchedule();
 }
@@ -549,14 +555,102 @@ function selectCellRange(startJobId, startDateKey, endJobId, endDateKey) {
     }
     primaryCellIndex = 0;
 
+    // Set anchor to start of range for future Shift+Arrow operations
+    selectionAnchor = {jobId: startJobId, dateKey: startDateKey};
+
     renderSchedule();
 }
 
 /**
- * Handle arrow key navigation
+ * Extend selection with Shift+Arrow (Excel-style)
+ */
+function extendSelectionWithArrow(key) {
+    let activeJobs = jobs.filter(j => j.active);
+    if (divisionFilter !== 'both') {
+        activeJobs = activeJobs.filter(j => j.division === divisionFilter);
+    }
+    if (activeJobs.length === 0) return;
+
+    const dates = getScheduleDates();
+
+    // If no cells selected, start with first cell
+    if (selectedCells.length === 0) {
+        selectCell(activeJobs[0].id, getDateKey(dates[0]));
+        selectionAnchor = {jobId: activeJobs[0].id, dateKey: getDateKey(dates[0])};
+        return;
+    }
+
+    // Set anchor if not set (first time using Shift+Arrow)
+    if (!selectionAnchor) {
+        const primaryCell = getPrimaryCell();
+        selectionAnchor = {jobId: primaryCell.jobId, dateKey: primaryCell.dateKey};
+    }
+
+    // Get the current end of selection (last cell that was added)
+    const lastCell = selectedCells[selectedCells.length - 1];
+
+    // Find current position
+    const jobIndex = activeJobs.findIndex(j => j.id === lastCell.jobId);
+    const dateIndex = dates.findIndex(d => getDateKey(d) === lastCell.dateKey);
+
+    if (jobIndex === -1 || dateIndex === -1) return;
+
+    // Calculate new position based on arrow key
+    let newJobIndex = jobIndex;
+    let newDateIndex = dateIndex;
+
+    switch (key) {
+        case 'ArrowUp':
+            newJobIndex = Math.max(0, jobIndex - 1);
+            break;
+        case 'ArrowDown':
+            newJobIndex = Math.min(activeJobs.length - 1, jobIndex + 1);
+            break;
+        case 'ArrowLeft':
+            newDateIndex = Math.max(0, dateIndex - 1);
+            break;
+        case 'ArrowRight':
+            newDateIndex = Math.min(dates.length - 1, dateIndex + 1);
+            break;
+    }
+
+    // Select range from anchor to new position
+    const anchorJobIndex = activeJobs.findIndex(j => j.id === selectionAnchor.jobId);
+    const anchorDateIndex = dates.findIndex(d => getDateKey(d) === selectionAnchor.dateKey);
+
+    if (anchorJobIndex !== -1 && anchorDateIndex !== -1) {
+        const minJobIndex = Math.min(anchorJobIndex, newJobIndex);
+        const maxJobIndex = Math.max(anchorJobIndex, newJobIndex);
+        const minDateIndex = Math.min(anchorDateIndex, newDateIndex);
+        const maxDateIndex = Math.max(anchorDateIndex, newDateIndex);
+
+        // Clear and rebuild selection
+        selectedCells = [];
+        for (let jobIdx = minJobIndex; jobIdx <= maxJobIndex; jobIdx++) {
+            for (let dateIdx = minDateIndex; dateIdx <= maxDateIndex; dateIdx++) {
+                selectedCells.push({
+                    jobId: activeJobs[jobIdx].id,
+                    dateKey: getDateKey(dates[dateIdx])
+                });
+            }
+        }
+        primaryCellIndex = 0;
+
+        renderSchedule();
+
+        // Scroll the new cell into view
+        scrollCellIntoView(activeJobs[newJobIndex].id, getDateKey(dates[newDateIndex]));
+    }
+}
+
+/**
+ * Handle arrow key navigation (without Shift)
  */
 function handleArrowKey(key) {
-    const activeJobs = jobs.filter(j => j.active);
+    let activeJobs = jobs.filter(j => j.active);
+    if (divisionFilter !== 'both') {
+        activeJobs = activeJobs.filter(j => j.division === divisionFilter);
+    }
     if (activeJobs.length === 0) return;
 
     const dates = getScheduleDates();
@@ -564,6 +658,7 @@ function handleArrowKey(key) {
     // If no cell selected, select the first cell
     if (selectedCells.length === 0) {
         selectCell(activeJobs[0].id, getDateKey(dates[0]));
+        selectionAnchor = {jobId: activeJobs[0].id, dateKey: getDateKey(dates[0])};
         return;
     }
 
@@ -571,6 +666,7 @@ function handleArrowKey(key) {
     const primaryCell = getPrimaryCell();
     if (!primaryCell) {
         selectCell(activeJobs[0].id, getDateKey(dates[0]));
+        selectionAnchor = {jobId: activeJobs[0].id, dateKey: getDateKey(dates[0])};
         return;
     }
 
@@ -581,6 +677,7 @@ function handleArrowKey(key) {
     if (jobIndex === -1 || dateIndex === -1) {
         // Invalid state, reset
         selectCell(activeJobs[0].id, getDateKey(dates[0]));
+        selectionAnchor = {jobId: activeJobs[0].id, dateKey: getDateKey(dates[0])};
         return;
     }
 
@@ -602,7 +699,10 @@ function handleArrowKey(key) {
             break;
     }
 
+    // Move to new cell (single selection)
     selectCell(activeJobs[newJobIndex].id, getDateKey(dates[newDateIndex]));
+    // Reset anchor for next Shift+Arrow operation
+    selectionAnchor = {jobId: activeJobs[newJobIndex].id, dateKey: getDateKey(dates[newDateIndex])};
 
     // Scroll selected cell into view
     scrollCellIntoView(activeJobs[newJobIndex].id, getDateKey(dates[newDateIndex]));
@@ -2499,10 +2599,15 @@ function handleCellClick(jobId, dateKey, event) {
     if (isRangeSelect && lastClickedCell) {
         // Shift+Click: Select range from last clicked cell to this cell
         selectCellRange(lastClickedCell.jobId, lastClickedCell.dateKey, jobId, dateKey);
+        // Keep the anchor from the start of the range
+        if (!selectionAnchor) {
+            selectionAnchor = {jobId: lastClickedCell.jobId, dateKey: lastClickedCell.dateKey};
+        }
     } else if (isMultiSelect) {
         // Ctrl/Cmd+Click: Toggle this cell in the selection
         selectCell(jobId, dateKey, true);
         lastClickedCell = {jobId, dateKey};
+        // Don't reset anchor for multi-select
     } else {
         // Check if this cell is the only selected cell
         const isOnlySelected = selectedCells.length === 1 &&
@@ -2517,6 +2622,7 @@ function handleCellClick(jobId, dateKey, event) {
             // Single select this cell
             selectCell(jobId, dateKey, false);
             lastClickedCell = {jobId, dateKey};
+            selectionAnchor = {jobId, dateKey};
         }
     }
 }
