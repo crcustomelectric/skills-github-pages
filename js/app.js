@@ -87,6 +87,19 @@ function getEfficiencyMultiplier(crewSize) {
     return 0.50;
 }
 
+/**
+ * Format worker name for display (first name + last initial)
+ */
+function formatWorkerName(worker) {
+    const parts = worker.name.trim().split(/\s+/);
+    if (parts.length === 1) {
+        return parts[0]; // Only first name
+    }
+    const firstName = parts[0];
+    const lastInitial = parts[parts.length - 1].charAt(0);
+    return `${firstName} ${lastInitial}.`;
+}
+
 // ============================================================================
 // Modal Functions
 // ============================================================================
@@ -390,7 +403,13 @@ document.addEventListener('keydown', function(e) {
     // Handle keyboard navigation (arrow keys)
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.preventDefault();
-        handleArrowKey(e.key);
+
+        // If typeahead is active and we're pressing up/down, navigate typeahead
+        if (typeaheadResults.length > 0 && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+            navigateTypeahead(e.key);
+        } else {
+            handleArrowKey(e.key);
+        }
         return;
     }
 
@@ -579,12 +598,27 @@ function updateTypeahead() {
         return;
     }
 
-    // Filter workers by name (case-insensitive)
+    // Filter workers by name (fuzzy search - case-insensitive, matches anywhere)
     const searchLower = typeaheadBuffer.toLowerCase();
     typeaheadResults = workers.filter(w =>
         w.name.toLowerCase().includes(searchLower)
     );
     typeaheadSelectedIndex = 0;
+
+    renderSchedule();
+}
+
+/**
+ * Navigate typeahead dropdown with arrow keys
+ */
+function navigateTypeahead(key) {
+    if (typeaheadResults.length === 0) return;
+
+    if (key === 'ArrowDown') {
+        typeaheadSelectedIndex = Math.min(typeaheadResults.length - 1, typeaheadSelectedIndex + 1);
+    } else if (key === 'ArrowUp') {
+        typeaheadSelectedIndex = Math.max(0, typeaheadSelectedIndex - 1);
+    }
 
     renderSchedule();
 }
@@ -709,6 +743,71 @@ function performUndo() {
 
     saveData();
     renderSchedule();
+}
+
+/**
+ * Clear all assignments for a specific week
+ */
+function clearWeek(weekOffset) {
+    // Confirm action
+    const weekStart = getWeekMonday(scheduleWeekOffset + weekOffset);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 5);
+    const weekLabel = `${formatDateShort(weekStart)} – ${formatDateShort(weekEnd)}`;
+
+    if (!confirm(`Clear all worker assignments for the week of ${weekLabel}?\n\nThis cannot be undone (unless you use Cmd+Z immediately).`)) {
+        return;
+    }
+
+    saveStateForUndo();
+
+    // Get all dates for this week
+    const dates = [];
+    for (let day = 0; day < 6; day++) {
+        const date = new Date(weekStart);
+        date.setDate(weekStart.getDate() + day);
+        dates.push(getDateKey(date));
+    }
+
+    // Clear all assignments for this week
+    Object.keys(dailySchedule).forEach(slotKey => {
+        const dateKey = slotKey.split('_').slice(1).join('_'); // Everything after first underscore
+        if (dates.includes(dateKey)) {
+            // Clear assignments but keep demand
+            if (dailySchedule[slotKey].assigned) {
+                dailySchedule[slotKey].assigned = [];
+            }
+        }
+    });
+
+    saveData();
+    renderSchedule();
+}
+
+/**
+ * Show clear week modal
+ */
+function showClearWeekModal() {
+    const weekOptions = [];
+    for (let week = 0; week < 3; week++) {
+        const weekStart = getWeekMonday(scheduleWeekOffset + week);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 5);
+        weekOptions.push({
+            offset: week,
+            label: week === 0 ? 'Current Week' : week === 1 ? 'Next Week' : '2 Weeks Ahead',
+            dateRange: `${formatDateShort(weekStart)} – ${formatDateShort(weekEnd)}`
+        });
+    }
+
+    const message = 'Which week would you like to clear?\n\n' +
+        weekOptions.map((w, i) => `${i + 1}. ${w.label} (${w.dateRange})`).join('\n');
+
+    const choice = prompt(message + '\n\nEnter 1, 2, or 3:');
+
+    if (choice === '1' || choice === '2' || choice === '3') {
+        clearWeek(parseInt(choice) - 1);
+    }
 }
 
 // ============================================================================
@@ -1563,9 +1662,9 @@ function renderScheduleGrid(dates) {
                     <div class="worker-chip-mini worker-chip-${w.role}"
                          draggable="true"
                          ondragstart="dragWorkerStart(event, ${w.id}, 'vacation', '${dateKey}')"
-                         title="${w.name} - Time Off">
-                        <span class="chip-name-mini">${w.name.split(' ')[0]}</span>
-                        <button class="chip-remove" onclick="removeVacation(${w.id}, '${dateKey}'); event.stopPropagation()">×</button>
+                         onclick="removeVacation(${w.id}, '${dateKey}'); event.stopPropagation();"
+                         title="${w.name} - Time Off (click to remove)">
+                        <span class="chip-name-mini">${formatWorkerName(w)}</span>
                     </div>
                 `).join('')}
             </div>
@@ -1653,7 +1752,7 @@ function renderScheduleGrid(dates) {
                                      ondragstart="dragWorkerStart(event, ${w.id}, ${job.id}, '${dateKey}')"
                                      onclick="removeScheduleWorker(${job.id}, '${dateKey}', ${w.id}); event.stopPropagation();"
                                      title="${w.name} (click to remove)">
-                                    <span class="chip-name-mini">${w.name.split(' ')[0]}</span>
+                                    <span class="chip-name-mini">${formatWorkerName(w)}</span>
                                 </div>
                             `).join('')}
                         </div>
