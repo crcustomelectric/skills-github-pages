@@ -16,6 +16,10 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+    <!-- OCR & Barcode Scanning -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -26,6 +30,7 @@
                 <p>Track &amp; Manage Materials</p>
             </div>
             <div class="header-actions">
+                <button class="btn btn-scan" onclick="showScanModal()">Scan Label</button>
                 <button class="btn btn-primary" onclick="showAddItemModal()">+ Add Item</button>
                 <button class="btn btn-secondary" onclick="exportCSV()">Export CSV</button>
                 <a href="index.html" class="btn btn-secondary">Man Loader</a>
@@ -260,6 +265,145 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
                 <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scan Label Modal -->
+    <div class="modal-overlay" id="scanModal">
+        <div class="modal modal-scan">
+            <div class="modal-header">
+                <h2 id="scanModalTitle">Scan Label</h2>
+                <button class="modal-close" onclick="closeScanModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Step 1: Capture -->
+                <div id="scanStep1">
+                    <div class="scan-options">
+                        <button class="scan-option-btn" onclick="startCameraCapture()">
+                            <span class="scan-option-icon">&#128247;</span>
+                            <span class="scan-option-label">Take Photo</span>
+                            <span class="scan-option-desc">Use camera to photograph label</span>
+                        </button>
+                        <button class="scan-option-btn" onclick="document.getElementById('scanFileInput').click()">
+                            <span class="scan-option-icon">&#128194;</span>
+                            <span class="scan-option-label">Upload Photo</span>
+                            <span class="scan-option-desc">Choose an existing photo</span>
+                        </button>
+                        <button class="scan-option-btn" onclick="startBarcodeScanner()">
+                            <span class="scan-option-icon">&#9649;</span>
+                            <span class="scan-option-label">Scan Barcode</span>
+                            <span class="scan-option-desc">Scan UPC / barcode on label</span>
+                        </button>
+                    </div>
+                    <input type="file" id="scanFileInput" accept="image/*" style="display:none" onchange="handleScanFileUpload(event)">
+                    <input type="file" id="scanCameraInput" accept="image/*" capture="environment" style="display:none" onchange="handleScanFileUpload(event)">
+
+                    <!-- Camera / barcode preview area -->
+                    <div id="scanPreviewArea" class="scan-preview-area" style="display:none">
+                        <div id="barcodeReader"></div>
+                        <img id="scanPreviewImg" style="display:none">
+                        <button class="btn btn-secondary btn-sm" id="scanCancelCamera" onclick="cancelScanPreview()" style="display:none; margin-top:8px;">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Step 2: Processing -->
+                <div id="scanStep2" style="display:none">
+                    <div class="scan-processing">
+                        <div class="scan-progress-container">
+                            <div class="scan-spinner"></div>
+                            <p id="scanProgressText">Reading label...</p>
+                            <div class="scan-progress-bar">
+                                <div class="scan-progress-fill" id="scanProgressFill"></div>
+                            </div>
+                        </div>
+                        <div class="scan-image-preview">
+                            <img id="scanProcessingImg" src="" alt="Scanning...">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Review extracted data -->
+                <div id="scanStep3" style="display:none">
+                    <div class="scan-review">
+                        <div class="scan-review-header">
+                            <p>Review the extracted information. Edit any fields, set the quantity, then add to inventory.</p>
+                        </div>
+                        <div class="scan-image-thumb">
+                            <img id="scanReviewImg" src="" alt="Label photo">
+                        </div>
+
+                        <!-- Raw OCR toggle -->
+                        <details class="scan-raw-toggle">
+                            <summary>Show raw OCR text</summary>
+                            <pre id="scanRawText" class="scan-raw-text"></pre>
+                        </details>
+
+                        <div class="form-grid" style="margin-top: 12px;">
+                            <div class="form-group">
+                                <label for="scanCatalog">Catalog #</label>
+                                <input type="text" id="scanCatalog">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanProductLine">Product Line</label>
+                                <input type="text" id="scanProductLine">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanManufacturer">Manufacturer</label>
+                                <input type="text" id="scanManufacturer">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanDescription">Description</label>
+                                <input type="text" id="scanDescription">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanType">Type</label>
+                                <input type="text" id="scanType">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanDistributor">Distributor</label>
+                                <input type="text" id="scanDistributor">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanSO">SO #</label>
+                                <input type="text" id="scanSO">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanSOLine">SO Line</label>
+                                <input type="text" id="scanSOLine">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanWorkOrder">Work Order</label>
+                                <input type="text" id="scanWorkOrder">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanPartnerPO">Partner PO</label>
+                                <input type="text" id="scanPartnerPO">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanAssemblyDate">Assembly Date</label>
+                                <input type="text" id="scanAssemblyDate">
+                            </div>
+                            <div class="form-group full-width">
+                                <label for="scanJobName">Job Name</label>
+                                <input type="text" id="scanJobName">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanBarcode">UPC / Barcode</label>
+                                <input type="text" id="scanBarcode">
+                            </div>
+                            <div class="form-group">
+                                <label for="scanQty" class="qty-label">How many in inventory?</label>
+                                <input type="number" id="scanQty" value="1" min="1" class="qty-input-lg">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" id="scanFooter">
+                <button class="btn btn-secondary" onclick="closeScanModal()">Cancel</button>
+                <button class="btn btn-primary" id="scanAddBtn" onclick="addScannedItem()" style="display:none">Add to Inventory</button>
+                <button class="btn btn-secondary" id="scanAnotherBtn" onclick="scanAnother()" style="display:none">Scan Another</button>
             </div>
         </div>
     </div>

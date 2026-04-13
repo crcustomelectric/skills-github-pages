@@ -791,6 +791,263 @@ header {
     }
 }
 
+/* ===== Scan Button ===== */
+.btn-scan {
+    background: linear-gradient(135deg, #ff6b00, #ff9800);
+    color: #fff;
+    font-weight: 700;
+    padding: 8px 20px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    animation: scanPulse 2s ease-in-out infinite;
+}
+
+.btn-scan:hover {
+    background: linear-gradient(135deg, #e65c00, #e68900);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(255, 107, 0, 0.3);
+}
+
+@keyframes scanPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.3); }
+    50% { box-shadow: 0 0 0 6px rgba(255, 152, 0, 0); }
+}
+
+/* ===== Scan Modal ===== */
+.modal-scan {
+    max-width: 600px;
+}
+
+.scan-options {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.scan-option-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 20px 12px;
+    background: var(--bg-surface);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.scan-option-btn:hover {
+    border-color: var(--primary-blue);
+    background: rgba(0, 86, 160, 0.1);
+}
+
+.scan-option-icon {
+    font-size: 2rem;
+}
+
+.scan-option-label {
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.scan-option-desc {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* Scan preview */
+.scan-preview-area {
+    margin-top: 12px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: #000;
+    text-align: center;
+}
+
+.scan-preview-area img {
+    max-width: 100%;
+    max-height: 300px;
+    object-fit: contain;
+}
+
+#barcodeReader {
+    width: 100%;
+}
+
+#barcodeReader video {
+    border-radius: var(--radius);
+}
+
+/* Processing step */
+.scan-processing {
+    text-align: center;
+    padding: 20px 0;
+}
+
+.scan-progress-container {
+    margin-bottom: 20px;
+}
+
+.scan-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--primary-blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 12px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+#scanProgressText {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.scan-progress-bar {
+    width: 100%;
+    height: 6px;
+    background: var(--bg-surface);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.scan-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-blue), #2196f3);
+    border-radius: 3px;
+    transition: width 0.3s;
+    width: 0%;
+}
+
+.scan-image-preview {
+    margin-top: 16px;
+}
+
+.scan-image-preview img {
+    max-width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    border-radius: var(--radius);
+    opacity: 0.6;
+}
+
+/* Review step */
+.scan-review-header {
+    margin-bottom: 12px;
+}
+
+.scan-review-header p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.scan-image-thumb {
+    text-align: center;
+    margin-bottom: 12px;
+}
+
+.scan-image-thumb img {
+    max-width: 100%;
+    max-height: 150px;
+    object-fit: contain;
+    border-radius: var(--radius);
+    border: 1px solid var(--border-color);
+}
+
+.scan-raw-toggle {
+    margin-bottom: 8px;
+}
+
+.scan-raw-toggle summary {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+}
+
+.scan-raw-toggle summary:hover {
+    color: var(--text-secondary);
+}
+
+.scan-raw-text {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    max-height: 120px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-top: 6px;
+    font-family: monospace;
+}
+
+/* Quantity field highlight */
+.qty-label {
+    color: var(--warning) !important;
+    font-size: 0.8rem !important;
+}
+
+.qty-input-lg {
+    font-size: 1.3rem !important;
+    font-weight: 700 !important;
+    text-align: center;
+    padding: 10px !important;
+    border-color: var(--warning) !important;
+    background: rgba(255, 152, 0, 0.08) !important;
+}
+
+.qty-input-lg:focus {
+    box-shadow: 0 0 0 2px rgba(255, 152, 0, 0.3) !important;
+}
+
+/* Scan field highlight for auto-filled fields */
+.scan-filled {
+    border-color: var(--success) !important;
+    background: rgba(76, 175, 80, 0.08) !important;
+}
+
+@media (max-width: 768px) {
+    .scan-options {
+        flex-direction: column;
+    }
+
+    .scan-option-btn {
+        flex-direction: row;
+        padding: 14px 16px;
+        text-align: left;
+    }
+
+    .scan-option-icon {
+        font-size: 1.5rem;
+    }
+
+    .scan-option-desc {
+        text-align: left;
+    }
+}
+
 /* ===== Scrollbar ===== */
 ::-webkit-scrollbar {
     width: 8px;

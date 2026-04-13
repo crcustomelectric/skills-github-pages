@@ -539,9 +539,347 @@ function esc(str) {
     return div.innerHTML;
 }
 
+// ===== SCAN & AUTO-FILL =====
+
+let scanImageData = null; // base64 of scanned image
+let barcodeScanner = null;
+
+function showScanModal() {
+    document.getElementById('scanModal').classList.add('active');
+    resetScanUI();
+}
+
+function closeScanModal() {
+    stopBarcodeScanner();
+    document.getElementById('scanModal').classList.remove('active');
+    resetScanUI();
+}
+
+function resetScanUI() {
+    document.getElementById('scanStep1').style.display = '';
+    document.getElementById('scanStep2').style.display = 'none';
+    document.getElementById('scanStep3').style.display = 'none';
+    document.getElementById('scanAddBtn').style.display = 'none';
+    document.getElementById('scanAnotherBtn').style.display = 'none';
+    document.getElementById('scanPreviewArea').style.display = 'none';
+    document.getElementById('scanCancelCamera').style.display = 'none';
+    document.getElementById('scanPreviewImg').style.display = 'none';
+    document.getElementById('scanModalTitle').textContent = 'Scan Label';
+    document.getElementById('scanProgressFill').style.width = '0%';
+    scanImageData = null;
+}
+
+// --- Camera capture (mobile-friendly) ---
+function startCameraCapture() {
+    document.getElementById('scanCameraInput').click();
+}
+
+function handleScanFileUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        scanImageData = e.target.result;
+        runOCR(scanImageData);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
+}
+
+// --- Barcode scanner ---
+function startBarcodeScanner() {
+    const previewArea = document.getElementById('scanPreviewArea');
+    const readerEl = document.getElementById('barcodeReader');
+    previewArea.style.display = 'block';
+    document.getElementById('scanCancelCamera').style.display = 'inline-block';
+
+    try {
+        barcodeScanner = new Html5Qrcode('barcodeReader');
+        barcodeScanner.start(
+            { facingMode: 'environment' },
+            { fps: 10, qrbox: { width: 280, height: 100 }, aspectRatio: 2.0 },
+            (decodedText) => {
+                // Barcode found
+                stopBarcodeScanner();
+                handleBarcodeResult(decodedText);
+            },
+            () => { /* ignore scan misses */ }
+        ).catch(err => {
+            console.error('Barcode scanner start error:', err);
+            alert('Could not access camera. Please check permissions or use "Upload Photo" instead.');
+            cancelScanPreview();
+        });
+    } catch (err) {
+        console.error('Barcode scanner init error:', err);
+        alert('Barcode scanner not available. Try uploading a photo instead.');
+        cancelScanPreview();
+    }
+}
+
+function stopBarcodeScanner() {
+    if (barcodeScanner) {
+        try {
+            barcodeScanner.stop().catch(() => {});
+        } catch {}
+        try {
+            barcodeScanner.clear();
+        } catch {}
+        barcodeScanner = null;
+    }
+}
+
+function cancelScanPreview() {
+    stopBarcodeScanner();
+    document.getElementById('scanPreviewArea').style.display = 'none';
+    document.getElementById('scanCancelCamera').style.display = 'none';
+    document.getElementById('scanPreviewImg').style.display = 'none';
+}
+
+function handleBarcodeResult(code) {
+    // Show review step with barcode pre-filled
+    goToReviewStep({
+        barcode: code,
+        rawText: 'Barcode: ' + code
+    });
+}
+
+// --- OCR with Tesseract.js ---
+async function runOCR(imageDataUrl) {
+    // Switch to processing step
+    document.getElementById('scanStep1').style.display = 'none';
+    document.getElementById('scanStep2').style.display = '';
+    document.getElementById('scanProcessingImg').src = imageDataUrl;
+    document.getElementById('scanModalTitle').textContent = 'Reading Label...';
+
+    const progressFill = document.getElementById('scanProgressFill');
+    const progressText = document.getElementById('scanProgressText');
+
+    try {
+        const result = await Tesseract.recognize(imageDataUrl, 'eng', {
+            logger: (m) => {
+                if (m.status === 'recognizing text') {
+                    const pct = Math.round((m.progress || 0) * 100);
+                    progressFill.style.width = pct + '%';
+                    progressText.textContent = `Reading label... ${pct}%`;
+                } else if (m.status) {
+                    progressText.textContent = m.status + '...';
+                }
+            }
+        });
+
+        const rawText = result.data.text;
+        const parsed = parseLabelText(rawText);
+        parsed.rawText = rawText;
+        goToReviewStep(parsed);
+
+    } catch (err) {
+        console.error('OCR error:', err);
+        progressText.textContent = 'OCR failed. Please try again with a clearer photo.';
+        setTimeout(() => resetScanUI(), 2000);
+    }
+}
+
+// --- Label text parser ---
+// Designed around the label formats from Columbia Lighting / Graybar / electrical distributors
+function parseLabelText(text) {
+    const result = {};
+    // Normalize: collapse whitespace, keep newlines for structure
+    const clean = text.replace(/\r/g, '');
+    const lines = clean.split('\n').map(l => l.trim()).filter(Boolean);
+    const flat = lines.join(' ');
+
+    // Catalog number - looks like LCAT24-40LWG-EDU-C588 pattern
+    // Match common electrical catalog patterns: letters+numbers with dashes
+    const catMatch = flat.match(/\b([A-Z]{2,}[\d][\w]*(?:-[\w]+){2,})\b/i);
+    if (catMatch) {
+        result.catalog = catMatch[1].toUpperCase();
+    }
+
+    // Product line - usually short code like LCAT, after catalog on label
+    // Also check for explicit "LCAT" or similar product line labels
+    const plMatch = flat.match(/(?:^|\s)(LCAT|DERA|DERA|EPHS|DERA|PACK|CRML|BLD|ERE|JBL|HBL|FHB|TMS|LHV|LPC|MPR|LRV)(?:\s|$)/i);
+    if (plMatch) {
+        result.productLine = plMatch[1].toUpperCase();
+    } else if (result.catalog) {
+        // Extract product line from catalog (first alpha chars)
+        const plFromCat = result.catalog.match(/^([A-Z]+)/);
+        if (plFromCat) result.productLine = plFromCat[1];
+    }
+
+    // Manufacturer - look for known brands
+    const manufacturers = [
+        'Columbia Lighting', 'Hubbell', 'Lithonia', 'Acuity', 'Eaton',
+        'Cooper', 'RAB', 'Cree', 'Philips', 'Lutron', 'Leviton',
+        'Square D', 'Schneider', 'ABB', 'Siemens', 'GE', 'Legrand'
+    ];
+    for (const mfr of manufacturers) {
+        if (flat.toLowerCase().includes(mfr.toLowerCase())) {
+            result.manufacturer = mfr;
+            break;
+        }
+    }
+    // Columbia Lighting specific - check "Product:" area or "Columbia" alone
+    if (!result.manufacturer && /columbi/i.test(flat)) {
+        result.manufacturer = 'Columbia Lighting';
+    }
+
+    // Distributor - check for known distributors
+    const distributors = ['GRAYBAR', 'Graybar', 'WESCO', 'Rexel', 'CED', 'Sonepar', 'City Electric'];
+    for (const dist of distributors) {
+        if (flat.toUpperCase().includes(dist.toUpperCase())) {
+            result.distributor = dist.charAt(0).toUpperCase() + dist.slice(1).toLowerCase();
+            break;
+        }
+    }
+
+    // SO number - "SO:" or "SO :" followed by digits
+    const soMatch = flat.match(/SO[:\s]*(\d{6,})/i);
+    if (soMatch) result.soNumber = soMatch[1];
+
+    // SO Line - "SO Line:" followed by number
+    const slMatch = flat.match(/SO\s*Line[:\s]*(\d+)/i);
+    if (slMatch) result.soLine = slMatch[1];
+
+    // Quantity - "QTY:" or "Qty:" followed by number
+    const qtyMatch = flat.match(/QTY[:\s]*(\d+)/i);
+    if (qtyMatch) result.qty = qtyMatch[1];
+
+    // Work Order - "Work Order:" or "Work O" followed by digits
+    const woMatch = flat.match(/Work\s*(?:Order|O)[:\s]*([\d]+)/i);
+    if (woMatch) result.workOrder = woMatch[1];
+
+    // Partner PO - "Partner PO:" or "Partner Po"
+    const poMatch = flat.match(/Partner\s*PO[:\s]*([A-Z0-9][\w\-]*)/i);
+    if (poMatch) result.partnerPO = poMatch[1];
+
+    // Assembly Date - "Assembly Date:" or just a date near that context
+    const adMatch = flat.match(/(?:Assembly\s*Date|Assembly)[:\s]*([\d]{1,2}[\/\-][\d]{1,2}[\/\-][\d]{2,4})/i);
+    if (adMatch) result.assemblyDate = adMatch[1];
+
+    // Type - "Type" field, often single letter like "B"
+    const typeMatch = flat.match(/\bType[:\s]*([A-Z])\b/i);
+    if (typeMatch) result.type = typeMatch[1].toUpperCase();
+
+    // Job Name - "Job Name:" or "Job\nName:" then text until next field
+    const jobMatch = clean.match(/Job\s*Name[:\s]*([^\n]+(?:\n[^\n]*)?)/i);
+    if (jobMatch) {
+        let jobName = jobMatch[1].trim();
+        // Clean up: remove trailing labels like "DO NOT REMOVE"
+        jobName = jobName.replace(/\s*(DO NOT|OPEN|FIXTURE).*$/i, '').trim();
+        // Join multi-line job names
+        jobName = jobName.replace(/\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
+        if (jobName.length > 2) result.jobName = jobName;
+    }
+
+    // UPC code - "UPC:" followed by digits
+    const upcMatch = flat.match(/UPC[:\s]*([\d]+)/i);
+    if (upcMatch) result.barcode = upcMatch[1];
+
+    return result;
+}
+
+// --- Go to review step ---
+function goToReviewStep(parsed) {
+    document.getElementById('scanStep1').style.display = 'none';
+    document.getElementById('scanStep2').style.display = 'none';
+    document.getElementById('scanStep3').style.display = '';
+    document.getElementById('scanModalTitle').textContent = 'Review & Add';
+    document.getElementById('scanAddBtn').style.display = '';
+    document.getElementById('scanAnotherBtn').style.display = '';
+
+    // Show image thumb if we have one
+    const thumbImg = document.getElementById('scanReviewImg');
+    if (scanImageData) {
+        thumbImg.src = scanImageData;
+        thumbImg.parentElement.style.display = '';
+    } else {
+        thumbImg.parentElement.style.display = 'none';
+    }
+
+    // Raw text
+    document.getElementById('scanRawText').textContent = parsed.rawText || '(no text extracted)';
+
+    // Fill fields and highlight auto-filled ones
+    const fieldMap = {
+        scanCatalog: parsed.catalog || '',
+        scanProductLine: parsed.productLine || '',
+        scanManufacturer: parsed.manufacturer || '',
+        scanDescription: parsed.description || '',
+        scanType: parsed.type || '',
+        scanDistributor: parsed.distributor || '',
+        scanSO: parsed.soNumber || '',
+        scanSOLine: parsed.soLine || '',
+        scanWorkOrder: parsed.workOrder || '',
+        scanPartnerPO: parsed.partnerPO || '',
+        scanAssemblyDate: parsed.assemblyDate || '',
+        scanJobName: parsed.jobName || '',
+        scanBarcode: parsed.barcode || '',
+    };
+
+    for (const [id, value] of Object.entries(fieldMap)) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.value = value;
+            if (value) {
+                el.classList.add('scan-filled');
+            } else {
+                el.classList.remove('scan-filled');
+            }
+        }
+    }
+
+    // Default qty to what label says, or 1
+    document.getElementById('scanQty').value = parsed.qty || 1;
+}
+
+// --- Add scanned item to inventory ---
+function addScannedItem() {
+    const item = {
+        id: generateId(),
+        catalog: document.getElementById('scanCatalog').value.trim(),
+        productLine: document.getElementById('scanProductLine').value.trim(),
+        manufacturer: document.getElementById('scanManufacturer').value.trim(),
+        description: document.getElementById('scanDescription').value.trim(),
+        itemType: document.getElementById('scanType').value.trim(),
+        qty: parseInt(document.getElementById('scanQty').value) || 1,
+        distributor: document.getElementById('scanDistributor').value.trim(),
+        soNumber: document.getElementById('scanSO').value.trim(),
+        soLine: document.getElementById('scanSOLine').value.trim(),
+        workOrder: document.getElementById('scanWorkOrder').value.trim(),
+        partnerPO: document.getElementById('scanPartnerPO').value.trim(),
+        assemblyDate: document.getElementById('scanAssemblyDate').value.trim(),
+        jobName: document.getElementById('scanJobName').value.trim(),
+        barcode: document.getElementById('scanBarcode').value.trim(),
+        status: 'received',
+        dateReceived: new Date().toISOString().split('T')[0],
+        photos: scanImageData ? [scanImageData] : [],
+        createdAt: new Date().toISOString(),
+    };
+
+    inventoryItems.push(item);
+    saveData();
+    render();
+
+    // Brief success feedback, then offer to scan another
+    document.getElementById('scanModalTitle').textContent = 'Added!';
+    document.getElementById('scanAddBtn').style.display = 'none';
+
+    // Auto-reset to scan another after a moment
+    setTimeout(() => {
+        document.getElementById('scanModalTitle').textContent = 'Scan Label';
+    }, 1500);
+}
+
+// --- Scan another (stay in modal) ---
+function scanAnother() {
+    resetScanUI();
+}
+
 // --- Keyboard ---
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+        closeScanModal();
         closeModal();
         closeDeleteModal();
         closePhotoViewer();
